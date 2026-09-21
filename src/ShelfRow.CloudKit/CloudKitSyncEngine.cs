@@ -53,7 +53,10 @@ public class CloudKitSyncEngine
                 if (request.Operations.Count >= ModifyBatchSize) break;
                 request.Operations.Add(new CKRecordOperation
                 {
-                    OperationType = "delete",
+                    // The deletion queue intentionally retains only recordName after
+                    // the local row is gone. CloudKit's ordinary delete requires a
+                    // recordChangeTag; forceDelete is the tag-free equivalent.
+                    OperationType = "forceDelete",
                     Record = new CKDeleteRecord { RecordName = deletion.RecordName }
                 });
                 deletionOwners.Add(deletion.RecordName);
@@ -83,7 +86,7 @@ public class CloudKitSyncEngine
                 var record = CloudKitMapper.ToCKRecord(link);
                 request.Operations.Add(new CKRecordOperation
                 {
-                    OperationType = link.IsDelete ? "delete" : "create",
+                    OperationType = link.IsDelete ? "forceDelete" : "create",
                     Record = link.IsDelete
                         ? new CKDeleteRecord { RecordName = record.RecordName }
                         : record

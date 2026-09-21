@@ -162,6 +162,8 @@
       次回起動時に現在のモニターの作業領域内へ収めて復元。最大化・最小化時の大きさは保存しない
 - [x] **サインアウト後にproductionへ再サインインできない** — production専用APIトークンとHTTPS callbackを追加し、
       API/Web認証トークンを環境別に保管。期限切れWebトークンが拒否された場合も消去して認証をやり直す
+- [x] **同期送信が `missing required field 'recordChangeTag'` で停止する** — recordNameだけを保持する
+      Item / Shelf / CDMR削除キューでは、changeTag必須のdeleteではなくタグ不要のforceDeleteを使用
 
 ---
 

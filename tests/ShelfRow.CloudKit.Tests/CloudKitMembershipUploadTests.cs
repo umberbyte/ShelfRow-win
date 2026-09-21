@@ -42,7 +42,7 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         await engine.SyncUpAsync();
 
         Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
-            operation.GetProperty("operationType").GetString() == "delete"
+            operation.GetProperty("operationType").GetString() == "forceDelete"
             && operation.GetProperty("record").EnumerateObject().Select(property => property.Name)
                 .SequenceEqual(new[] { "recordName" }));
         Assert.Empty((await repository.GetItemByIdAsync(item.Id))!.ShelfIds);
@@ -70,7 +70,7 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         await new CloudKitSyncEngine(client, repository).SyncUpAsync();
 
         Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
-            operation.GetProperty("operationType").GetString() == "delete"
+            operation.GetProperty("operationType").GetString() == "forceDelete"
             && operation.GetProperty("record").GetProperty("recordName").GetString() == "ITEM-TO-DELETE"
             && operation.GetProperty("record").EnumerateObject().Select(property => property.Name)
                 .SequenceEqual(new[] { "recordName" }));
