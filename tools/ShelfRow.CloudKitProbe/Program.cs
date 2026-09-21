@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using ShelfRow.CloudKit;
+using ShelfRow.Data;
 
 // Must match the Sign In Callback registered on the API token in CloudKit Console.
 const string CallbackPrefix = "http://localhost:49152/";
@@ -19,6 +20,10 @@ if (args.Length >= 2 && args[0] == "--analyze")
     Verify(dumped);
     return 0;
 }
+
+bool syncMode = args.Length > 0 && args[0] == "--sync";
+if (syncMode)
+    args = args[1..];
 
 string? apiToken = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("SHELFROW_CK_API_TOKEN");
 if (string.IsNullOrWhiteSpace(apiToken))
@@ -59,6 +64,9 @@ if (apiToken.Length != 64 || !apiToken.All(char.IsAsciiHexDigit))
 }
 
 Console.WriteLine();
+
+if (syncMode)
+    return await RunSyncAsync(client, config, tokenCachePath);
 
 var allRecords = new List<CKRecord>();
 string? syncToken = null;
@@ -107,6 +115,70 @@ string dumpPath = Path.Combine(AppContext.BaseDirectory, "zone-dump.json");
 await File.WriteAllTextAsync(dumpPath, JsonSerializer.Serialize(allRecords, new JsonSerializerOptions { WriteIndented = true }));
 Console.WriteLine($"Full dump written to {dumpPath}");
 return 0;
+
+// Runs the production sync path end to end into a throwaway database, so the whole
+// pipeline is exercised against the live library rather than against fixtures.
+static async Task<int> RunSyncAsync(CloudKitClient client, CloudKitConfiguration config, string tokenCachePath)
+{
+    string dbPath = Path.Combine(AppContext.BaseDirectory, "sync-test.db");
+    foreach (string stale in Directory.GetFiles(AppContext.BaseDirectory, "sync-test.db*"))
+        File.Delete(stale);
+
+    using var repository = new SqliteShelfRowRepository(dbPath);
+    await repository.InitializeAsync();
+
+    var engine = new CloudKitSyncEngine(client, repository);
+    var progress = new Progress<int>(n => Console.Write($"\r  processed {n} records..."));
+    var started = Stopwatch.StartNew();
+
+    CloudKitSyncEngine.SyncResult result;
+    while (true)
+    {
+        try
+        {
+            result = await engine.SyncDownAsync(progress);
+            break;
+        }
+        catch (CloudKitException ex) when (ex.IsAuthenticationRequired && ex.RedirectUrl != null)
+        {
+            if (!await SignInAsync(ex.RedirectUrl, config, tokenCachePath))
+                return 1;
+        }
+        catch (CloudKitException ex)
+        {
+            Console.Error.WriteLine($"\nFAILED: {ex.Message}");
+            return 1;
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine();
+    Console.WriteLine($"=== sync finished in {started.Elapsed.TotalSeconds:F1}s ===");
+    Console.WriteLine($"  items    : {result.Items}");
+    Console.WriteLine($"  shelves  : {result.Shelves}");
+    Console.WriteLine($"  volumes  : {result.Volumes}");
+    Console.WriteLine($"  links    : {result.Links}");
+    Console.WriteLine($"  deletions: {result.Deletions}");
+    Console.WriteLine();
+
+    Console.WriteLine($"stored item count : {await repository.GetItemCountAsync()}");
+
+    var volumes = await repository.GetVolumesAsync();
+    foreach (var volume in volumes)
+        Console.WriteLine($"  volume: {volume.Name}  ({volume.LastKnownPath})");
+
+    var shelves = await repository.GetShelvesAsync();
+    Console.WriteLine($"stored shelf count: {shelves.Count}");
+    foreach (var shelf in shelves.Take(10))
+    {
+        int members = await repository.GetItemCountAsync(shelf.Id);
+        Console.WriteLine($"  shelf: {shelf.Title,-28} {members} books");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"Database written to {dbPath}");
+    return 0;
+}
 
 static void Summarize(List<CKRecord> records)
 {

@@ -19,9 +19,19 @@ public class CloudKitSyncEngine
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
-    public async Task<int> SyncDownAsync(CancellationToken cancellationToken = default)
+    public record SyncResult(int Items, int Shelves, int Volumes, int Links, int Deletions);
+
+    /// <summary>
+    /// Pulls every change since the stored sync token. Shelf membership and volume
+    /// references are resolved after the records land, because the zone delivers them as
+    /// CloudKit record names and gives no guarantee that a target arrives before the
+    /// record pointing at it.
+    /// </summary>
+    public async Task<SyncResult> SyncDownAsync(IProgress<int>? progress = null, CancellationToken cancellationToken = default)
     {
-        int recordsProcessed = 0;
+        int items = 0, shelves = 0, volumes = 0, deletions = 0, processed = 0;
+        var links = new List<ItemShelfLink>();
+
         bool moreComing = true;
         string? syncToken = await _repository.GetSyncMetadataAsync(SyncTokenKey, cancellationToken);
 
@@ -38,61 +48,72 @@ public class CloudKitSyncEngine
             if (zone.Records != null)
             {
                 var itemsBatch = new List<Item>();
+
                 foreach (var record in zone.Records)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     if (record.Deleted)
                     {
-                        if (Guid.TryParse(record.RecordName, out var delId))
-                        {
-                            await _repository.DeleteItemAsync(delId, cancellationToken);
-                            recordsProcessed++;
-                        }
+                        await _repository.DeleteByCloudKitRecordNameAsync(record.RecordName, cancellationToken);
+                        deletions++;
+                        processed++;
                         continue;
                     }
 
                     switch (record.RecordType)
                     {
                         case CloudKitMapper.ItemRecordType:
-                            var item = CloudKitMapper.ToItem(record);
-                            if (item != null)
+                            if (CloudKitMapper.ToItem(record) is { } item)
                             {
                                 itemsBatch.Add(item);
-                                recordsProcessed++;
+                                items++;
                             }
                             break;
 
                         case CloudKitMapper.ShelfRecordType:
-                            var shelf = CloudKitMapper.ToShelf(record);
-                            if (shelf != null)
+                            if (CloudKitMapper.ToShelf(record) is { } shelf)
                             {
                                 await _repository.UpsertShelfAsync(shelf, cancellationToken);
-                                recordsProcessed++;
+                                shelves++;
                             }
                             break;
 
                         case CloudKitMapper.VolumeRecordType:
-                            var volume = CloudKitMapper.ToVolume(record);
-                            if (volume != null)
+                            if (CloudKitMapper.ToVolume(record) is { } volume)
                             {
                                 await _repository.UpsertVolumeAsync(volume, cancellationToken);
-                                recordsProcessed++;
+                                volumes++;
+                            }
+                            break;
+
+                        case CloudKitMapper.ManyToManyRecordType:
+                            if (CloudKitMapper.ToManyToManyLink(record) is { } link &&
+                                link.LeftEntity == "Item" && link.RightEntity == "Shelf")
+                            {
+                                links.Add(new ItemShelfLink(record.RecordName, link.LeftRecordName, link.RightRecordName));
                             }
                             break;
                     }
+
+                    processed++;
                 }
 
                 if (itemsBatch.Count > 0)
-                {
                     await _repository.UpsertItemsBatchAsync(itemsBatch, cancellationToken);
-                }
+
+                progress?.Report(processed);
             }
 
             if (!string.IsNullOrEmpty(syncToken))
-            {
                 await _repository.SetSyncMetadataAsync(SyncTokenKey, syncToken, cancellationToken);
-            }
         }
 
-        return recordsProcessed;
+        await _repository.ResolveVolumeReferencesAsync(cancellationToken);
+
+        if (links.Count > 0)
+            await _repository.ApplyItemShelfLinksAsync(links, cancellationToken);
+
+        return new SyncResult(items, shelves, volumes, links.Count, deletions);
     }
 }

@@ -61,7 +61,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 Id TEXT PRIMARY KEY,
                 Name TEXT NOT NULL,
                 LastKnownPath TEXT,
-                WindowsMountPath TEXT
+                WindowsMountPath TEXT,
+                CloudKitRecordName TEXT,
+                CloudKitChangeTag TEXT
             );
 
             CREATE TABLE IF NOT EXISTS Shelves (
@@ -72,7 +74,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 SortOrder INTEGER NOT NULL,
                 SortAscending INTEGER NOT NULL,
                 SortKey TEXT NOT NULL,
-                SmartConditionsJson TEXT
+                SmartConditionsJson TEXT,
+                CloudKitRecordName TEXT,
+                CloudKitChangeTag TEXT
             );
 
             CREATE TABLE IF NOT EXISTS Items (
@@ -98,12 +102,16 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 FileType INTEGER NOT NULL,
                 CoverVersion INTEGER NOT NULL,
                 CoverBytes INTEGER NOT NULL,
+                VolumeRecordName TEXT,
+                CloudKitRecordName TEXT,
+                CloudKitChangeTag TEXT,
                 FOREIGN KEY (VolumeId) REFERENCES Volumes(Id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS ItemShelves (
                 ItemId TEXT NOT NULL,
                 ShelfId TEXT NOT NULL,
+                CloudKitRecordName TEXT,
                 PRIMARY KEY (ItemId, ShelfId),
                 FOREIGN KEY (ItemId) REFERENCES Items(Id) ON DELETE CASCADE,
                 FOREIGN KEY (ShelfId) REFERENCES Shelves(Id) ON DELETE CASCADE
@@ -120,8 +128,48 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             CREATE INDEX IF NOT EXISTS IX_Items_IsUnread ON Items(IsUnread);
             CREATE INDEX IF NOT EXISTS IX_Items_LegacyId ON Items(LegacyId);
             CREATE INDEX IF NOT EXISTS IX_ItemShelves_ShelfId ON ItemShelves(ShelfId);
+            CREATE INDEX IF NOT EXISTS IX_Items_CKRecordName ON Items(CloudKitRecordName);
+            CREATE INDEX IF NOT EXISTS IX_Items_VolumeRecordName ON Items(VolumeRecordName);
+            CREATE INDEX IF NOT EXISTS IX_Shelves_CKRecordName ON Shelves(CloudKitRecordName);
+            CREATE INDEX IF NOT EXISTS IX_Volumes_CKRecordName ON Volumes(CloudKitRecordName);
+            CREATE INDEX IF NOT EXISTS IX_ItemShelves_CKRecordName ON ItemShelves(CloudKitRecordName);
         ";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        await AddMissingColumnsAsync(conn, cancellationToken);
+    }
+
+    /// <summary>
+    /// CREATE TABLE IF NOT EXISTS leaves an older database without the CloudKit columns,
+    /// and that database may hold a Stackroom import worth keeping.
+    /// </summary>
+    private static async Task AddMissingColumnsAsync(SqliteConnection conn, CancellationToken cancellationToken)
+    {
+        (string Table, string Column)[] required =
+        [
+            ("Volumes", "CloudKitRecordName"),
+            ("Volumes", "CloudKitChangeTag"),
+            ("Shelves", "CloudKitRecordName"),
+            ("Shelves", "CloudKitChangeTag"),
+            ("Items", "VolumeRecordName"),
+            ("Items", "CloudKitRecordName"),
+            ("Items", "CloudKitChangeTag"),
+            ("ItemShelves", "CloudKitRecordName")
+        ];
+
+        foreach (var (table, column) in required)
+        {
+            using var check = conn.CreateCommand();
+            check.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = @Column";
+            check.Parameters.AddWithValue("@Column", column);
+
+            if (Convert.ToInt64(await check.ExecuteScalarAsync(cancellationToken)) > 0)
+                continue;
+
+            using var alter = conn.CreateCommand();
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} TEXT";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task<Item?> GetItemByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -240,11 +288,13 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             INSERT INTO Items (
                 Id, LegacyId, VolumeId, RelativePath, Title, Author, Rating, IsUnread,
                 Genre, Relation, KeywordA, KeywordB, Memo, CoverImageName, CoverImagePath,
-                AddedDate, LastReadDate, Pages, BookType, FileType, CoverVersion, CoverBytes
+                AddedDate, LastReadDate, Pages, BookType, FileType, CoverVersion, CoverBytes,
+                VolumeRecordName, CloudKitRecordName, CloudKitChangeTag
             ) VALUES (
                 @Id, @LegacyId, @VolumeId, @RelativePath, @Title, @Author, @Rating, @IsUnread,
                 @Genre, @Relation, @KeywordA, @KeywordB, @Memo, @CoverImageName, @CoverImagePath,
-                @AddedDate, @LastReadDate, @Pages, @BookType, @FileType, @CoverVersion, @CoverBytes
+                @AddedDate, @LastReadDate, @Pages, @BookType, @FileType, @CoverVersion, @CoverBytes,
+                @VolumeRecordName, @CloudKitRecordName, @CloudKitChangeTag
             )
             ON CONFLICT(Id) DO UPDATE SET
                 LegacyId = excluded.LegacyId,
@@ -267,7 +317,10 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 BookType = excluded.BookType,
                 FileType = excluded.FileType,
                 CoverVersion = excluded.CoverVersion,
-                CoverBytes = excluded.CoverBytes;
+                CoverBytes = excluded.CoverBytes,
+                VolumeRecordName = excluded.VolumeRecordName,
+                CloudKitRecordName = excluded.CloudKitRecordName,
+                CloudKitChangeTag = excluded.CloudKitChangeTag;
         ";
 
         var pId = cmdItem.Parameters.Add("@Id", SqliteType.Text);
@@ -292,6 +345,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var pFlt = cmdItem.Parameters.Add("@FileType", SqliteType.Integer);
         var pCvv = cmdItem.Parameters.Add("@CoverVersion", SqliteType.Integer);
         var pCvb = cmdItem.Parameters.Add("@CoverBytes", SqliteType.Integer);
+        var pVrn = cmdItem.Parameters.Add("@VolumeRecordName", SqliteType.Text);
+        var pCkr = cmdItem.Parameters.Add("@CloudKitRecordName", SqliteType.Text);
+        var pCkt = cmdItem.Parameters.Add("@CloudKitChangeTag", SqliteType.Text);
 
         using var cmdDeleteShelves = conn.CreateCommand();
         cmdDeleteShelves.Transaction = tx;
@@ -329,6 +385,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             pFlt.Value = item.FileType;
             pCvv.Value = item.CoverVersion;
             pCvb.Value = item.CoverBytes;
+            pVrn.Value = (object?)item.VolumeRecordName ?? DBNull.Value;
+            pCkr.Value = (object?)item.CloudKitRecordName ?? DBNull.Value;
+            pCkt.Value = (object?)item.CloudKitChangeTag ?? DBNull.Value;
 
             await cmdItem.ExecuteNonQueryAsync(cancellationToken);
 
@@ -388,8 +447,10 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT INTO Shelves (Id, Title, Icon, Type, SortOrder, SortAscending, SortKey, SmartConditionsJson)
-            VALUES (@Id, @Title, @Icon, @Type, @SortOrder, @SortAscending, @SortKey, @SmartConditionsJson)
+            INSERT INTO Shelves (Id, Title, Icon, Type, SortOrder, SortAscending, SortKey, SmartConditionsJson,
+                CloudKitRecordName, CloudKitChangeTag)
+            VALUES (@Id, @Title, @Icon, @Type, @SortOrder, @SortAscending, @SortKey, @SmartConditionsJson,
+                @CloudKitRecordName, @CloudKitChangeTag)
             ON CONFLICT(Id) DO UPDATE SET
                 Title = excluded.Title,
                 Icon = excluded.Icon,
@@ -397,7 +458,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 SortOrder = excluded.SortOrder,
                 SortAscending = excluded.SortAscending,
                 SortKey = excluded.SortKey,
-                SmartConditionsJson = excluded.SmartConditionsJson;
+                SmartConditionsJson = excluded.SmartConditionsJson,
+                CloudKitRecordName = excluded.CloudKitRecordName,
+                CloudKitChangeTag = excluded.CloudKitChangeTag;
         ";
         cmd.Parameters.AddWithValue("@Id", shelf.Id.ToString("D"));
         cmd.Parameters.AddWithValue("@Title", shelf.Title);
@@ -407,6 +470,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         cmd.Parameters.AddWithValue("@SortAscending", shelf.SortAscending ? 1 : 0);
         cmd.Parameters.AddWithValue("@SortKey", shelf.SortKey);
         cmd.Parameters.AddWithValue("@SmartConditionsJson", (object?)shelf.SmartConditionsJson ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CloudKitRecordName", (object?)shelf.CloudKitRecordName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CloudKitChangeTag", (object?)shelf.CloudKitChangeTag ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -467,17 +532,23 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT INTO Volumes (Id, Name, LastKnownPath, WindowsMountPath)
-            VALUES (@Id, @Name, @LastKnownPath, @WindowsMountPath)
+            INSERT INTO Volumes (Id, Name, LastKnownPath, WindowsMountPath, CloudKitRecordName, CloudKitChangeTag)
+            VALUES (@Id, @Name, @LastKnownPath, @WindowsMountPath, @CloudKitRecordName, @CloudKitChangeTag)
             ON CONFLICT(Id) DO UPDATE SET
                 Name = excluded.Name,
                 LastKnownPath = excluded.LastKnownPath,
-                WindowsMountPath = excluded.WindowsMountPath;
+                -- The Windows mount path is this machine's own and never travels through
+                -- iCloud, so a record arriving from sync must not erase it.
+                WindowsMountPath = COALESCE(excluded.WindowsMountPath, Volumes.WindowsMountPath),
+                CloudKitRecordName = excluded.CloudKitRecordName,
+                CloudKitChangeTag = excluded.CloudKitChangeTag;
         ";
         cmd.Parameters.AddWithValue("@Id", volume.Id.ToString("D"));
         cmd.Parameters.AddWithValue("@Name", volume.Name);
         cmd.Parameters.AddWithValue("@LastKnownPath", volume.LastKnownPath);
         cmd.Parameters.AddWithValue("@WindowsMountPath", (object?)volume.WindowsMountPath ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CloudKitRecordName", (object?)volume.CloudKitRecordName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CloudKitChangeTag", (object?)volume.CloudKitChangeTag ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -546,8 +617,87 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             BookType = reader.GetInt32(reader.GetOrdinal("BookType")),
             FileType = reader.GetInt32(reader.GetOrdinal("FileType")),
             CoverVersion = reader.GetInt32(reader.GetOrdinal("CoverVersion")),
-            CoverBytes = reader.GetInt64(reader.GetOrdinal("CoverBytes"))
+            CoverBytes = reader.GetInt64(reader.GetOrdinal("CoverBytes")),
+            VolumeRecordName = reader.IsDBNull(reader.GetOrdinal("VolumeRecordName")) ? null : reader.GetString(reader.GetOrdinal("VolumeRecordName")),
+            CloudKitRecordName = reader.IsDBNull(reader.GetOrdinal("CloudKitRecordName")) ? null : reader.GetString(reader.GetOrdinal("CloudKitRecordName")),
+            CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
         };
+    }
+
+    /// <summary>
+    /// Records item-shelf membership read from CDMR join records. The pair is expressed
+    /// as CloudKit record names, which are resolved here against the rows that carry them,
+    /// so links survive arriving before the items or shelves they connect.
+    /// </summary>
+    public async Task<int> ApplyItemShelfLinksAsync(IEnumerable<ItemShelfLink> links, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
+
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO ItemShelves (ItemId, ShelfId, CloudKitRecordName)
+            SELECT i.Id, s.Id, @RecordName
+            FROM Items i, Shelves s
+            WHERE i.CloudKitRecordName = @ItemRecordName
+              AND s.CloudKitRecordName = @ShelfRecordName;
+        ";
+        var pRecord = cmd.Parameters.Add("@RecordName", SqliteType.Text);
+        var pItem = cmd.Parameters.Add("@ItemRecordName", SqliteType.Text);
+        var pShelf = cmd.Parameters.Add("@ShelfRecordName", SqliteType.Text);
+
+        int applied = 0;
+        foreach (var link in links)
+        {
+            pRecord.Value = link.RecordName;
+            pItem.Value = link.ItemRecordName;
+            pShelf.Value = link.ShelfRecordName;
+            applied += await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return applied;
+    }
+
+    /// <summary>
+    /// Fills in VolumeId for items whose volume arrived as a record name, which is the
+    /// only form the zone carries.
+    /// </summary>
+    public async Task<int> ResolveVolumeReferencesAsync(CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            UPDATE Items
+            SET VolumeId = (SELECT v.Id FROM Volumes v WHERE v.CloudKitRecordName = Items.VolumeRecordName)
+            WHERE VolumeRecordName IS NOT NULL
+              AND (VolumeId IS NULL
+                   OR VolumeId <> (SELECT v.Id FROM Volumes v WHERE v.CloudKitRecordName = Items.VolumeRecordName))
+              AND EXISTS (SELECT 1 FROM Volumes v WHERE v.CloudKitRecordName = Items.VolumeRecordName);
+        ";
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies a deletion from the zone. A deleted record arrives as a record name with no
+    /// type, so every table that can hold one is checked.
+    /// </summary>
+    public async Task DeleteByCloudKitRecordNameAsync(string recordName, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
+
+        foreach (string table in new[] { "ItemShelves", "Items", "Shelves", "Volumes" })
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = $"DELETE FROM {table} WHERE CloudKitRecordName = @RecordName";
+            cmd.Parameters.AddWithValue("@RecordName", recordName);
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
     }
 
     public void Dispose()
