@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
@@ -211,11 +212,18 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
 
-        string query = @"
-            SELECT i.* FROM Items i
-        ";
+        string query = "SELECT i.* FROM Items i";
 
-        if (shelfId.HasValue)
+        var smartConditions = shelfId.HasValue
+            ? await GetSmartConditionsAsync(shelfId.Value, cancellationToken)
+            : null;
+
+        if (smartConditions != null)
+        {
+            // A smart shelf has no stored membership; its contents are whatever matches.
+            query += " WHERE 1=1" + BuildSmartConditionSql(smartConditions, cmd, DateTime.UtcNow);
+        }
+        else if (shelfId.HasValue)
         {
             query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId";
             cmd.Parameters.AddWithValue("@ShelfId", shelfId.Value.ToString("D"));
@@ -251,7 +259,16 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         using var cmd = conn.CreateCommand();
 
         string query = "SELECT COUNT(*) FROM Items i";
-        if (shelfId.HasValue)
+
+        var smartConditions = shelfId.HasValue
+            ? await GetSmartConditionsAsync(shelfId.Value, cancellationToken)
+            : null;
+
+        if (smartConditions != null)
+        {
+            query += " WHERE 1=1" + BuildSmartConditionSql(smartConditions, cmd, DateTime.UtcNow);
+        }
+        else if (shelfId.HasValue)
         {
             query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId";
             cmd.Parameters.AddWithValue("@ShelfId", shelfId.Value.ToString("D"));
@@ -622,6 +639,80 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             CloudKitRecordName = reader.IsDBNull(reader.GetOrdinal("CloudKitRecordName")) ? null : reader.GetString(reader.GetOrdinal("CloudKitRecordName")),
             CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
         };
+    }
+
+    /// <summary>
+    /// Turns a smart shelf's conditions into a SQL predicate. Evaluating them in memory
+    /// would mean loading the whole library for every shelf click, so they are pushed
+    /// down to the query the way the ordinary filters are.
+    /// Conditions combine with AND, matching the Mac app.
+    /// </summary>
+    private static string BuildSmartConditionSql(SmartConditions conditions, SqliteCommand cmd, DateTime now)
+    {
+        var sql = new StringBuilder();
+
+        if (conditions.Keyword is { } keyword && keyword.Text.Length > 0)
+        {
+            string column = KeywordColumn(keyword.Field);
+            cmd.Parameters.AddWithValue("@SmartKeyword", keyword.Text);
+            cmd.Parameters.AddWithValue("@SmartKeywordLike", $"%{keyword.Text}%");
+
+            sql.Append(keyword.Mode switch
+            {
+                1 => $" AND {column} NOT LIKE @SmartKeywordLike",
+                2 => $" AND {column} = @SmartKeyword",
+                _ => $" AND {column} LIKE @SmartKeywordLike"
+            });
+        }
+
+        if (conditions.Date is { } date)
+        {
+            // Dates are stored as round-trip ("O") strings, which compare correctly as text.
+            string column = date.Field == 1 ? "i.LastReadDate" : "i.AddedDate";
+            cmd.Parameters.AddWithValue("@SmartCutoff", now.AddDays(-date.Days).ToString("O"));
+
+            sql.Append(date.Mode == 1
+                ? $" AND {column} IS NOT NULL AND {column} < @SmartCutoff"
+                : $" AND {column} IS NOT NULL AND {column} >= @SmartCutoff");
+        }
+
+        if (conditions.Types is { Count: > 0 } types)
+            sql.Append($" AND i.BookType IN ({string.Join(",", types)})");
+
+        if (conditions.Rates is { Count: > 0 } rates)
+            sql.Append($" AND i.Rating IN ({string.Join(",", rates)})");
+
+        if (conditions.UnreadOnly)
+            sql.Append(" AND i.IsUnread = 1");
+
+        return sql.ToString();
+    }
+
+    private static string KeywordColumn(string field) => field.ToLowerInvariant() switch
+    {
+        "title" => "i.Title",
+        "author" => "i.Author",
+        "genre" => "i.Genre",
+        "relation" => "i.Relation",
+        "keyword a" or "keyworda" => "i.KeywordA",
+        "keyword b" or "keywordb" => "i.KeywordB",
+        "neta" or "memo" => "i.Memo",
+        // An unrecognised legacy field searches every text column, as on the Mac.
+        _ => "(i.Title || CHAR(10) || i.Author || CHAR(10) || i.Genre || CHAR(10) || i.Relation || CHAR(10) || i.KeywordA || CHAR(10) || i.KeywordB || CHAR(10) || i.Memo)"
+    };
+
+    private async Task<SmartConditions?> GetSmartConditionsAsync(Guid shelfId, CancellationToken cancellationToken)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Type, SmartConditionsJson FROM Shelves WHERE Id = @Id LIMIT 1";
+        cmd.Parameters.AddWithValue("@Id", shelfId.ToString("D"));
+
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.GetInt32(0) != 1)
+            return null;
+
+        return reader.IsDBNull(1) ? new SmartConditions() : SmartConditionsCodec.Decode(reader.GetString(1));
     }
 
     /// <summary>

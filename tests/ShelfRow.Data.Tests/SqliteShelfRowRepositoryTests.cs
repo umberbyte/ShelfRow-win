@@ -199,6 +199,88 @@ public class SqliteShelfRowRepositoryTests : IDisposable
         Assert.Equal(@"\\NAS\Files", storedVolume.WindowsMountPath);
     }
 
+    /// <summary>
+    /// A smart shelf stores no membership, so its contents have to be computed from its
+    /// conditions at query time. The conditions string here is the live library's.
+    /// </summary>
+    [Fact]
+    public async Task SmartShelf_FiltersByConditions_WithoutStoredMembership()
+    {
+        await _repository.InitializeAsync();
+
+        var smart = new Shelf
+        {
+            Title = "Bavel",
+            Type = 1,
+            SmartConditionsJson = """{"Keyword Condition":{"Key":"Bavel","Condition":"Title","Option":0}}"""
+        };
+        await _repository.UpsertShelfAsync(smart);
+
+        await _repository.UpsertItemsBatchAsync(new[]
+        {
+            new Item { Title = "Bavel 2018-01", RelativePath = "a.zip" },
+            new Item { Title = "COMIC BAVEL 2019-05", RelativePath = "b.zip" },
+            new Item { Title = "Something Else", RelativePath = "c.zip" }
+        });
+
+        var matched = await _repository.GetItemsAsync(0, 100, smart.Id);
+
+        Assert.Equal(2, matched.Count);
+        Assert.Equal(2, await _repository.GetItemCountAsync(smart.Id));
+        Assert.All(matched, item => Assert.Contains("bavel", item.Title.ToLowerInvariant()));
+    }
+
+    [Fact]
+    public async Task SmartShelf_CombinesConditionsWithAnd()
+    {
+        await _repository.InitializeAsync();
+
+        var smart = new Shelf
+        {
+            Title = "未読の高評価",
+            Type = 1,
+            SmartConditionsJson = """{"Rate Condition":{"Key":[4,5]},"Unseen Condition":{"Key":true}}"""
+        };
+        await _repository.UpsertShelfAsync(smart);
+
+        await _repository.UpsertItemsBatchAsync(new[]
+        {
+            new Item { Title = "unread five", RelativePath = "a.zip", Rating = 5, IsUnread = true },
+            new Item { Title = "read five", RelativePath = "b.zip", Rating = 5, IsUnread = false },
+            new Item { Title = "unread two", RelativePath = "c.zip", Rating = 2, IsUnread = true }
+        });
+
+        var matched = await _repository.GetItemsAsync(0, 100, smart.Id);
+
+        Assert.Single(matched);
+        Assert.Equal("unread five", matched[0].Title);
+    }
+
+    /// <summary>
+    /// A manual shelf must keep using its stored membership even though the smart path
+    /// now shares the same entry point.
+    /// </summary>
+    [Fact]
+    public async Task ManualShelf_StillUsesStoredMembership()
+    {
+        await _repository.InitializeAsync();
+
+        var shelf = new Shelf { Title = "Manual", Type = 0 };
+        await _repository.UpsertShelfAsync(shelf);
+
+        var member = new Item { Title = "In the shelf", RelativePath = "a.zip", ShelfIds = { shelf.Id } };
+        await _repository.UpsertItemsBatchAsync(new[]
+        {
+            member,
+            new Item { Title = "Not in the shelf", RelativePath = "b.zip" }
+        });
+
+        var matched = await _repository.GetItemsAsync(0, 100, shelf.Id);
+
+        Assert.Single(matched);
+        Assert.Equal("In the shelf", matched[0].Title);
+    }
+
     public void Dispose()
     {
         _repository.Dispose();

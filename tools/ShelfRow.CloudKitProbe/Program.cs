@@ -121,8 +121,14 @@ return 0;
 static async Task<int> RunSyncAsync(CloudKitClient client, CloudKitConfiguration config, string tokenCachePath)
 {
     string dbPath = Path.Combine(AppContext.BaseDirectory, "sync-test.db");
-    foreach (string stale in Directory.GetFiles(AppContext.BaseDirectory, "sync-test.db*"))
-        File.Delete(stale);
+
+    // Keeping the database between runs means a second run exercises the incremental
+    // path, which is what the app will do every time after the first.
+    if (Environment.GetCommandLineArgs().Contains("--fresh"))
+    {
+        foreach (string stale in Directory.GetFiles(AppContext.BaseDirectory, "sync-test.db*"))
+            File.Delete(stale);
+    }
 
     using var repository = new SqliteShelfRowRepository(dbPath);
     await repository.InitializeAsync();
@@ -169,10 +175,11 @@ static async Task<int> RunSyncAsync(CloudKitClient client, CloudKitConfiguration
 
     var shelves = await repository.GetShelvesAsync();
     Console.WriteLine($"stored shelf count: {shelves.Count}");
-    foreach (var shelf in shelves.Take(10))
+    foreach (var shelf in shelves.Take(12))
     {
         int members = await repository.GetItemCountAsync(shelf.Id);
-        Console.WriteLine($"  shelf: {shelf.Title,-28} {members} books");
+        string kind = shelf.IsSmart ? "smart " : "manual";
+        Console.WriteLine($"  {kind} shelf: {shelf.Title,-26} {members} books");
     }
 
     Console.WriteLine();
