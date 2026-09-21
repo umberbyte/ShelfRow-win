@@ -23,6 +23,13 @@ public sealed partial class MainWindow : Window
             this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 800));
         }
         catch { }
+
+        // A list marks Enter handled for its own selection behaviour, so an ordinary
+        // KeyDown attached in markup never sees it. Registering for handled events too
+        // is the only way to act on it.
+        var enterHandler = new Microsoft.UI.Xaml.Input.KeyEventHandler(BookList_KeyDown);
+        BookGridView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
+        BookListView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
     }
 
     public MainViewModel? ViewModel
@@ -221,6 +228,21 @@ public sealed partial class MainWindow : Window
         {
             _viewModel.SearchKeyword(_viewModel.SelectedItem.Relation, inAllLibrary: true);
         }
+    }
+
+    private async void BookList_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    {
+        if (_viewModel != null)
+            await _viewModel.OpenItemAsync(_viewModel.SelectedItem);
+    }
+
+    private async void BookList_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Enter || _viewModel == null)
+            return;
+
+        e.Handled = true;
+        await _viewModel.OpenItemAsync(_viewModel.SelectedItem);
     }
 
     #endregion

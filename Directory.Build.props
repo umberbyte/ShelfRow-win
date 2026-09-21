@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- MSBuild の高速インクリメンタルビルドを有効化 -->
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    <BuildInParallel>true</BuildInParallel>
+  </PropertyGroup>
+</Project>

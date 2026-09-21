@@ -18,10 +18,22 @@ public class CloudKitConfiguration
     public string Database { get; set; } = "private";
 
     /// <summary>
-    /// Created in CloudKit Console under API Access. Required on every request,
-    /// including ones that also carry a web auth token.
+    /// This container's API token, from CloudKit Console under API Access.
+    ///
+    /// It is shipped with the app on purpose. An API token identifies the container,
+    /// not a person: Apple has CloudKit JS pages carry it in plain HTML. On its own it
+    /// reaches only the public database, which ShelfRow does not use — every book, shelf
+    /// and volume lives in the private database, which no one can touch without that
+    /// user's own Apple ID sign-in. Making each person find and paste this would be a
+    /// chore that buys no safety.
     /// </summary>
-    public string? ApiToken { get; set; }
+    public const string DefaultApiToken = "e0c24a83106304e699285699f1efa6b660fb9c753289d514102edcb24dc9a91c";
+
+    /// <summary>
+    /// Required on every request, including ones that also carry a web auth token.
+    /// Overridable so a different container can be pointed at without a rebuild.
+    /// </summary>
+    public string? ApiToken { get; set; } = DefaultApiToken;
 
     /// <summary>
     /// Identifies the signed-in Apple ID. Required for the private database.

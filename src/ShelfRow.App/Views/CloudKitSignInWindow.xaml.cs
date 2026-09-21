@@ -37,21 +37,23 @@ public sealed partial class CloudKitSignInWindow : Window
     {
         StatusText.Text = "サインインページを読み込んでいます...";
 
-        // WebView2 otherwise keeps its cookies beside the executable, so every rebuild
-        // would throw away Apple's "keep me signed in" cookie and demand a full sign-in
-        // with two-factor again.
-        string userDataFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ShelfRow",
-            "WebView2");
-        Directory.CreateDirectory(userDataFolder);
+        try
+        {
+            // The control starts creating its own environment as soon as it is shown, so
+            // the profile location is set through the environment variable App reads at
+            // startup rather than by passing an environment in here, which would arrive
+            // too late and throw.
+            await AuthWebView.EnsureCoreWebView2Async();
 
-        var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
-            string.Empty, userDataFolder, new CoreWebView2EnvironmentOptions());
-
-        await AuthWebView.EnsureCoreWebView2Async(environment);
-        AuthWebView.CoreWebView2.NavigationStarting += OnNavigationStarting;
-        AuthWebView.CoreWebView2.Navigate(_signInUrl);
+            AuthWebView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            AuthWebView.CoreWebView2.Navigate(_signInUrl);
+            App.Log("Auth: navigating to the Apple sign-in page");
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Auth: WebView2 failed to start: {ex}");
+            StatusText.Text = $"サインインページを表示できませんでした: {ex.Message}";
+        }
     }
 
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)

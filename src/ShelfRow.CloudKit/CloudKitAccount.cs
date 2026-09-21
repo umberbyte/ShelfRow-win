@@ -54,7 +54,12 @@ public class CloudKitAccount
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        _client.Configuration.ApiToken = await _secureStorage.GetSecretAsync(ApiTokenKey, cancellationToken);
+        // Falling back to the built-in token means a fresh install is ready to sign in,
+        // with no credential for the user to go and find first.
+        _client.Configuration.ApiToken =
+            await _secureStorage.GetSecretAsync(ApiTokenKey, cancellationToken)
+            ?? CloudKitConfiguration.DefaultApiToken;
+
         _client.Configuration.WebAuthToken = await _secureStorage.GetSecretAsync(WebAuthTokenKey, cancellationToken);
     }
 

@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
@@ -23,12 +24,29 @@ public class WebView2CloudKitWebAuth : ICloudKitWebAuth
     {
         var opened = new TaskCompletionSource<Task<string?>>();
 
-        _dispatcherQueue.TryEnqueue(() =>
+        App.Log("Auth: opening the sign-in window");
+
+        bool enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
-            var window = new CloudKitSignInWindow(signInUrl);
-            window.Activate();
-            opened.SetResult(window.TokenTask);
+            try
+            {
+                var window = new CloudKitSignInWindow(signInUrl);
+                window.Activate();
+                App.Log("Auth: sign-in window activated");
+                opened.SetResult(window.TokenTask);
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Auth: sign-in window failed to open: {ex}");
+                opened.SetException(ex);
+            }
         });
+
+        if (!enqueued)
+        {
+            App.Log("Auth: could not reach the UI thread");
+            return Task.FromResult<string?>(null);
+        }
 
         return opened.Task.Unwrap();
     }

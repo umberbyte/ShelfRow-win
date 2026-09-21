@@ -87,24 +87,35 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
 
     private void AutoDetect_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is VolumeViewModel vm)
-        {
-            vm.SuggestDefaultMapping();
-        }
+        VolumeOf(sender)?.SuggestDefaultMapping();
     }
+
+    /// <summary>
+    /// The volume a row's button belongs to. It travels in Tag rather than DataContext,
+    /// which ItemsRepeater does not reliably set on the elements it realizes.
+    /// </summary>
+    private static VolumeViewModel? VolumeOf(object sender)
+        => (sender as FrameworkElement)?.Tag as VolumeViewModel;
 
     private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not VolumeViewModel vm) return;
+        if (VolumeOf(sender) is not { } vm)
+        {
+            App.Log("FolderPicker: the button carried no volume");
+            return;
+        }
 
         try
         {
+            App.Log($"FolderPicker: opening with hwnd={_windowHandle}");
+
             var picker = new FolderPicker();
             InitializeWithWindow.Initialize(picker, _windowHandle);
             picker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
-            picker.FileTypeFilter.Add("*");
 
             var folder = await picker.PickSingleFolderAsync();
+            App.Log($"FolderPicker: returned {(folder == null ? "nothing" : folder.Path)}");
+
             if (folder != null)
             {
                 vm.WindowsMountPath = folder.Path;
@@ -112,7 +123,7 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"FolderPicker error: {ex.Message}");
+            App.Log($"FolderPicker: failed {ex}");
         }
     }
 }

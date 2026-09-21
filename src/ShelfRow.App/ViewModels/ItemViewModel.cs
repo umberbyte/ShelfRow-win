@@ -73,9 +73,21 @@ public class ItemViewModel : INotifyPropertyChanged
                 _model.Rating = Math.Clamp(value, 0, 5);
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(RatingStarsText));
+                OnPropertyChanged(nameof(RatingValue));
                 NotifyChanged();
             }
         }
+    }
+
+    /// <summary>
+    /// The rating as RatingControl expresses it, where -1 means unrated. Binding a plain
+    /// 0 makes the control round it up to one star and write that back through the
+    /// binding, so every unrated book picked up a star just by being selected.
+    /// </summary>
+    public double RatingValue
+    {
+        get => _model.Rating <= 0 ? -1 : _model.Rating;
+        set => Rating = value < 0 ? 0 : (int)value;
     }
 
     public bool IsUnread

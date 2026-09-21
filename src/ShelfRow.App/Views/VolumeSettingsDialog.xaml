@@ -11,7 +11,17 @@
     DefaultButton="Primary"
     CloseButtonText="キャンセル">
 
-    <Grid Width="580" MaxHeight="520" Margin="0,8,0,0">
+    <ContentDialog.Resources>
+        <!--
+            A ContentDialog is capped at 548px by default, which cut off the Windows path
+            field and the thumbnail button. The content sets no width of its own so it
+            fills whatever these allow.
+        -->
+        <x:Double x:Key="ContentDialogMaxWidth">820</x:Double>
+        <x:Double x:Key="ContentDialogMinWidth">760</x:Double>
+    </ContentDialog.Resources>
+
+    <Grid MaxHeight="520" Margin="0,8,0,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -92,6 +102,7 @@
                                             Content="自動推定"
                                             FontSize="12"
                                             Padding="8,4"
+                                            Tag="{x:Bind}"
                                             Click="AutoDetect_Click"
                                             ToolTipService.ToolTip="macOS パスから Windows パスを自動推定します" />
                                 </Grid>
@@ -131,10 +142,16 @@
                                              FontFamily="Consolas"
                                              FontSize="12" />
 
+                                    <!--
+                                        Tag carries the volume: ItemsRepeater does not
+                                        reliably set DataContext on realized elements, and
+                                        the handlers were silently dropping every click.
+                                    -->
                                     <Button Grid.Column="2"
                                             Content="参照..."
                                             FontSize="12"
                                             Padding="10,5"
+                                            Tag="{x:Bind}"
                                             Click="BrowseFolder_Click" />
                                 </Grid>
                             </Grid>

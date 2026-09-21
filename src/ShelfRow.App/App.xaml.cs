@@ -14,12 +14,36 @@ public partial class App : Application
 {
     private Window? _mainWindow;
 
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ShelfRow",
+        "launch.log");
+
+    public static void Log(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            File.AppendAllText(LogPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}\n");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     public App()
     {
         this.InitializeComponent();
 
-        string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShelfRow", "launch.log");
-        void Log(string msg) => File.AppendAllText(logPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n");
+        // WebView2 otherwise keeps its profile beside the executable, so every rebuild
+        // would discard Apple's "keep me signed in" cookie and demand two-factor again.
+        // It has to be set before any WebView2 is created.
+        string webViewProfile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ShelfRow",
+            "WebView2");
+        Directory.CreateDirectory(webViewProfile);
+        Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", webViewProfile);
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
@@ -49,9 +73,6 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShelfRow", "launch.log");
-        void Log(string msg) => File.AppendAllText(logPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n");
-
         Log("OnLaunched started");
 
         try

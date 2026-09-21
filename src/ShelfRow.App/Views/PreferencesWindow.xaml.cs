@@ -33,7 +33,7 @@ public sealed partial class PreferencesWindow : Window
         Title = "設定";
         try
         {
-            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(860, 620));
+            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 720));
         }
         catch { }
 
@@ -351,8 +351,11 @@ public sealed partial class PreferencesWindow : Window
 
     private async void SyncNow_Click(object sender, RoutedEventArgs e)
     {
+        // The main window's status bar is behind this window, so the result has to be
+        // reported here or the click looks like it did nothing.
+        TxtCloudAuthStatus.Text = "同期しています...";
         await _mainViewModel.SyncWithCloudKitAsync();
-        await RefreshCloudAuthStatusAsync();
+        TxtCloudAuthStatus.Text = _mainViewModel.StatusMessage;
     }
 
     private async void CloudSignIn_Click(object sender, RoutedEventArgs e)
@@ -366,12 +369,6 @@ public sealed partial class PreferencesWindow : Window
         else
             await account.LoadAsync();
 
-        if (!account.HasApiToken)
-        {
-            TxtCloudAuthStatus.Text = "API トークンを入力してください。";
-            return;
-        }
-
         account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
         _settings.CloudKitEnvironment = account.Environment;
         _settingsService.Save(_settings);
@@ -380,7 +377,7 @@ public sealed partial class PreferencesWindow : Window
         // real request and following the redirect the server answers with.
         TxtCloudAuthStatus.Text = "サインインしています...";
         await _mainViewModel.SyncWithCloudKitAsync();
-        await RefreshCloudAuthStatusAsync();
+        TxtCloudAuthStatus.Text = _mainViewModel.StatusMessage;
     }
 
     private async void CloudSignOut_Click(object sender, RoutedEventArgs e)
@@ -398,11 +395,9 @@ public sealed partial class PreferencesWindow : Window
 
         await account.LoadAsync();
 
-        TxtCloudAuthStatus.Text = !account.HasApiToken
-            ? "未設定: API トークンがありません。"
-            : account.IsSignedIn
-                ? $"サインイン済み ({account.Environment})"
-                : "API トークンあり・未サインイン。";
+        TxtCloudAuthStatus.Text = account.IsSignedIn
+            ? $"サインイン済み ({account.Environment})"
+            : "未サインインです。「サインイン」を押してください。";
     }
 
     private async void ResendToCloud_Click(object sender, RoutedEventArgs e)

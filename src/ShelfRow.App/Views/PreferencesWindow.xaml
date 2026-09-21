@@ -286,9 +286,16 @@
 
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="CloudKit 接続" FontWeight="Medium" />
-                                    <TextBlock Text="CloudKit Console の API Access で作成した API トークン (16進64文字) を入力してください。Sign In Callback には http://localhost:49152/shelfrow-auth を登録しておく必要があります。"
+                                    <TextBlock Text="「サインイン」を押すと Apple ID のサインイン画面が開きます。「サインインしたままにする」を選ぶと2週間、選ばない場合は30分で再サインインが必要になります。"
                                                FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <PasswordBox x:Name="TxtCloudApiToken" PlaceholderText="API トークン" HorizontalAlignment="Stretch" />
+
+                                    <Expander Header="別のコンテナに接続する (通常は不要)" HorizontalAlignment="Stretch">
+                                        <StackPanel Spacing="8" Padding="0,8">
+                                            <TextBlock Text="API トークンはアプリに組み込まれています。別の CloudKit コンテナを使う場合だけ、そのトークン (16進64文字) を入力してください。Sign In Callback に http://localhost:49152/shelfrow-auth の登録が必要です。"
+                                                       FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <PasswordBox x:Name="TxtCloudApiToken" PlaceholderText="API トークン (省略可)" HorizontalAlignment="Stretch" />
+                                        </StackPanel>
+                                    </Expander>
 
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="環境" VerticalAlignment="Center" />
@@ -296,7 +303,7 @@
                                             <ComboBoxItem Content="development" />
                                             <ComboBoxItem Content="production" />
                                         </ComboBox>
-                                        <Button Content="保存してサインイン" Click="CloudSignIn_Click" />
+                                        <Button Content="サインイン" Click="CloudSignIn_Click" />
                                         <Button Content="サインアウト" Click="CloudSignOut_Click" />
                                     </StackPanel>
 

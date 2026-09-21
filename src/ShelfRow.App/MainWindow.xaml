@@ -303,11 +303,20 @@
                     </StackPanel>
 
                     <!-- GRID VIEW MODE (Matching mac GridItemCardView) -->
-                    <ScrollViewer Visibility="{x:Bind ViewModel.IsGridView, Mode=OneWay}" Padding="20,16">
-                        <GridView ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
+                    <!--
+                        Not wrapped in a ScrollViewer: GridView brings its own, and an
+                        outer one gives it unlimited height, which turns virtualization
+                        off and makes it build a card for every book in the library at
+                        once.
+                    -->
+                    <GridView x:Name="BookGridView"
+                                  Visibility="{x:Bind ViewModel.IsGridView, Mode=OneWay}"
+                                  Padding="20,16"
+                                  ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
                                   SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
                                   SelectionMode="Single"
-                                  IsItemClickEnabled="True">
+                                  IsItemClickEnabled="False"
+                                  DoubleTapped="BookList_DoubleTapped">
                             <GridView.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <ItemsWrapGrid Orientation="Horizontal" ItemWidth="130" ItemHeight="195" />
@@ -344,15 +353,16 @@
                                     </StackPanel>
                                 </DataTemplate>
                             </GridView.ItemTemplate>
-                        </GridView>
-                    </ScrollViewer>
+                    </GridView>
 
                     <!-- LIST VIEW MODE (Matching mac classicListRow) -->
-                    <ListView Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}"
+                    <ListView x:Name="BookListView"
+                              Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}"
                               ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
                               SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
                               SelectionMode="Single"
-                              Padding="12,8">
+                              Padding="12,8"
+                              DoubleTapped="BookList_DoubleTapped">
                         <ListView.Header>
                             <Grid Padding="12,6" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
                                 <Grid.ColumnDefinitions>
@@ -492,7 +502,13 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="レート:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                <RatingControl Grid.Column="1" Value="{x:Bind ViewModel.SelectedItem.Rating, Mode=TwoWay}" MaxRating="5" HorizontalAlignment="Left" />
+                                <!--
+                                    Bound to RatingValue, not Rating: RatingControl uses
+                                    -1 for "no rating" and rounds a 0 up to 1, writing
+                                    that back, so selecting an unrated book gave it a star.
+                                -->
+                                <RatingControl Grid.Column="1" Value="{x:Bind ViewModel.SelectedItem.RatingValue, Mode=TwoWay}"
+                                               MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left" />
                             </Grid>
 
                             <!-- Keyword A -->

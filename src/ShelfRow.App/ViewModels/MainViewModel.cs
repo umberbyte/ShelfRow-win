@@ -23,6 +23,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly ThumbnailStorageManager _thumbnailManager;
     private readonly CloudKitSyncEngine _syncEngine;
     private readonly CloudKitAccount _cloudKitAccount;
+    private readonly BookLauncher _bookLauncher;
     private readonly ThumbnailImageLoader? _imageLoader;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
     private readonly AppSettingsService _settingsService;
@@ -60,6 +61,7 @@ public class MainViewModel : INotifyPropertyChanged
         _imageLoader = imageLoader;
         _dispatcherQueue = dispatcherQueue;
         _settingsService = settingsService ?? new AppSettingsService();
+        _bookLauncher = new BookLauncher(_settingsService, new VolumePathResolver());
 
         Books = new ObservableCollection<ItemViewModel>();
         Shelves = new ObservableCollection<Shelf>();
@@ -71,13 +73,6 @@ public class MainViewModel : INotifyPropertyChanged
         _isGridView = _settingsService.Current.MainViewIsGrid;
         _sortKey = _settingsService.Current.MainSortKey;
         _sortAscending = _settingsService.Current.MainSortAscending;
-
-        Books.CollectionChanged += (s, e) =>
-        {
-            OnPropertyChanged(nameof(IsEmpty));
-            OnPropertyChanged(nameof(ItemsCountText));
-            OnPropertyChanged(nameof(TotalBooksCountText));
-        };
 
         Volumes.CollectionChanged += (s, e) =>
         {
@@ -99,7 +94,12 @@ public class MainViewModel : INotifyPropertyChanged
     public event EventHandler? OpenSettingsRequested;
     public event Action<string>? ImportCompletedNotification;
 
-    public ObservableCollection<ItemViewModel> Books { get; }
+    /// <summary>
+    /// Replaced wholesale rather than refilled. Adding twenty thousand books one at a
+    /// time raises a change notification per book, and the grid rebuilds on each one,
+    /// which locks up the window for minutes.
+    /// </summary>
+    public ObservableCollection<ItemViewModel> Books { get; private set; }
     public ObservableCollection<Shelf> Shelves { get; }
     public ObservableCollection<Shelf> StaticShelves { get; }
     public ObservableCollection<Shelf> SmartShelves { get; }
@@ -330,7 +330,13 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     public string ItemsCountText => $"{Books.Count:N0} 項目";
-    public string TotalBooksCountText => $"蔵書計: {_allItemModels.Count:N0} 冊 (表示中: {Books.Count:N0} 冊)";
+    /// <summary>
+    /// The whole library, which is no longer the same as what is loaded: selecting a
+    /// shelf loads only that shelf's books.
+    /// </summary>
+    private int _libraryCount;
+
+    public string TotalBooksCountText => $"蔵書計: {_libraryCount:N0} 冊 (表示中: {Books.Count:N0} 冊)";
 
     public bool IsLoading
     {
@@ -363,7 +369,11 @@ public class MainViewModel : INotifyPropertyChanged
             _isUnreadCollectionSelected = false;
             OnPropertyChanged();
             CurrentCollectionTitle = _selectedShelf?.Title ?? "すべての項目";
-            ApplyFilterAndSort();
+
+            // Shelf membership is not held on the loaded items, and a smart shelf has no
+            // membership at all, so which books a shelf holds is a question only the
+            // database can answer.
+            _ = RefreshBooksAsync();
         }
     }
 
@@ -373,7 +383,7 @@ public class MainViewModel : INotifyPropertyChanged
         _isUnreadCollectionSelected = false;
         CurrentCollectionTitle = "すべての項目";
         OnPropertyChanged(nameof(SelectedShelf));
-        ApplyFilterAndSort();
+        _ = RefreshBooksAsync();
     }
 
     public void SelectUnreadCollection()
@@ -382,7 +392,7 @@ public class MainViewModel : INotifyPropertyChanged
         _isUnreadCollectionSelected = true;
         CurrentCollectionTitle = "未読";
         OnPropertyChanged(nameof(SelectedShelf));
-        ApplyFilterAndSort();
+        _ = RefreshBooksAsync();
     }
 
     public ItemViewModel? SelectedItem
@@ -440,11 +450,16 @@ public class MainViewModel : INotifyPropertyChanged
         IsLoading = true;
         try
         {
-            var items = await _repository.GetItemsAsync(0, int.MaxValue);
+            // Reading twenty thousand rows and building a view model for each is far too
+            // much for the UI thread; doing it there is what left the window black.
+            var items = await Task.Run(() => _repository.GetItemsAsync(0, int.MaxValue, _selectedShelf?.Id));
+
             _allItemModels.Clear();
             _allItemModels.AddRange(items);
 
-            ApplyFilterAndSort();
+            _libraryCount = await Task.Run(() => _repository.GetItemCountAsync());
+
+            await Task.Run(ApplyFilterAndSort);
             StatusMessage = $"ライブラリ読み込み完了 ({_allItemModels.Count:N0} 冊)";
         }
         catch (Exception ex)
@@ -466,10 +481,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             query = query.Where(i => i.IsUnread);
         }
-        else if (_selectedShelf != null)
-        {
-            query = query.Where(i => i.ShelfIds.Contains(_selectedShelf.Id));
-        }
+        // The shelf itself is applied by the query that loaded these items, not here.
 
         // Search text
         if (!string.IsNullOrWhiteSpace(_searchQuery))
@@ -517,11 +529,8 @@ public class MainViewModel : INotifyPropertyChanged
 
         RunOnUI(() =>
         {
-            Books.Clear();
-            foreach (var vm in filteredList)
-            {
-                Books.Add(vm);
-            }
+            Books = new ObservableCollection<ItemViewModel>(filteredList);
+            OnPropertyChanged(nameof(Books));
 
             if (SelectedItem != null)
             {
@@ -536,6 +545,40 @@ public class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(TotalBooksCountText));
             OnPropertyChanged(nameof(IsEmpty));
         });
+    }
+
+
+
+    /// <summary>
+    /// Opens a book in an external viewer and marks it read, as double-clicking does on
+    /// the Mac. ShelfRow has no viewer of its own.
+    /// </summary>
+    public async Task OpenItemAsync(ItemViewModel? itemViewModel, CancellationToken cancellationToken = default)
+    {
+        if (itemViewModel == null) return;
+
+        var item = itemViewModel.Model;
+        var volume = item.VolumeId.HasValue
+            ? await _repository.GetVolumeByIdAsync(item.VolumeId.Value, cancellationToken)
+            : null;
+
+        var result = await Task.Run(() => _bookLauncher.Open(item, volume), cancellationToken);
+
+        if (!result.Opened)
+        {
+            StatusMessage = result.Error ?? "ファイルを開けませんでした。";
+            return;
+        }
+
+        StatusMessage = $"開きました: {item.Title}";
+
+        if (itemViewModel.IsUnread)
+        {
+            item.LastReadDate = DateTime.UtcNow;
+
+            // The setter notifies and persists.
+            itemViewModel.IsUnread = false;
+        }
     }
 
     private void OnItemModelChanged(Item item)
@@ -662,7 +705,10 @@ public class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            await _repository.UpsertVolumeAsync(volumeVm.Model);
+            // This dialog only edits the Windows mount path, which belongs to this
+            // machine and never travels through iCloud, so saving it must not queue the
+            // volume for upload.
+            await _repository.UpsertVolumeAsync(volumeVm.Model, markPendingUpload: false);
             StatusMessage = $"ボリューム「{volumeVm.Name}」の設定を保存しました";
         }
         catch (Exception ex)
@@ -685,32 +731,42 @@ public class MainViewModel : INotifyPropertyChanged
 
     public async Task SyncWithCloudKitAsync(CancellationToken cancellationToken = default)
     {
-        if (IsLoading) return;
+        if (IsLoading)
+        {
+            App.Log("Sync: ignored, another operation is already running");
+            return;
+        }
 
         IsLoading = true;
         StatusMessage = "iCloudと同期中...";
         try
         {
             await _cloudKitAccount.LoadAsync(cancellationToken);
+            App.Log($"Sync: starting. hasApiToken={_cloudKitAccount.HasApiToken} signedIn={_cloudKitAccount.IsSignedIn} env={_cloudKitAccount.Environment}");
 
             if (!_cloudKitAccount.HasApiToken)
             {
                 StatusMessage = "iCloud: APIトークンが未設定です。設定 > iCloud で入力してください。";
+                App.Log("Sync: aborted, no API token");
                 return;
             }
 
             // Send local edits first, so the download that follows brings back the
             // server's view of them rather than overwriting them with a stale copy.
             var uploadProgress = new Progress<int>(n => StatusMessage = $"iCloudへ送信中... {n:N0} 件");
-            var upload = await _cloudKitAccount.ExecuteAsync(
-                ct => _syncEngine.SyncUpAsync(uploadProgress, ct),
-                cancellationToken);
-
             var progress = new Progress<int>(n => StatusMessage = $"iCloudと同期中... {n:N0} 件");
 
-            var result = await _cloudKitAccount.ExecuteAsync(
+            // A first sync is tens of thousands of records to parse and write. On the UI
+            // thread that freezes the window for minutes and Windows paints it black, so
+            // the whole exchange runs off it. Progress reports come back here on their
+            // own, because Progress<T> captures this thread when it is created.
+            var upload = await Task.Run(() => _cloudKitAccount.ExecuteAsync(
+                ct => _syncEngine.SyncUpAsync(uploadProgress, ct),
+                cancellationToken), cancellationToken);
+
+            var result = await Task.Run(() => _cloudKitAccount.ExecuteAsync(
                 ct => _syncEngine.SyncDownAsync(progress, ct),
-                cancellationToken);
+                cancellationToken), cancellationToken);
 
             await RefreshBooksAsync();
             await LoadShelvesAsync();
@@ -730,14 +786,17 @@ public class MainViewModel : INotifyPropertyChanged
         catch (CloudKitException ex) when (ex.IsAuthenticationRequired)
         {
             StatusMessage = "iCloud: サインインが完了していません。";
+            App.Log($"Sync: authentication not completed. code={ex.ServerErrorCode} hasRedirect={ex.RedirectUrl != null}");
         }
         catch (CloudKitException ex)
         {
             StatusMessage = $"iCloud同期エラー: {ex.ServerErrorCode} - {ex.Reason}";
+            App.Log($"Sync: CloudKit error {ex.ServerErrorCode} - {ex.Reason}");
         }
         catch (Exception ex)
         {
             StatusMessage = $"iCloud同期エラー: {ex.Message}";
+            App.Log($"Sync: failed {ex}");
         }
         finally
         {
