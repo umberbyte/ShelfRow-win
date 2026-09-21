@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -49,10 +50,41 @@ public class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(TotalBooksCountText));
         };
 
+        Volumes.CollectionChanged += (s, e) =>
+        {
+            OnPropertyChanged(nameof(HasVolumes));
+            OnPropertyChanged(nameof(HasNoVolumes));
+        };
+
         SyncCommand = new RelayCommand(async () => await SyncWithCloudKitAsync());
+        SyncThumbnailsCommand = new RelayCommand(async () => await SyncAllThumbnailsAsync());
     }
 
     public System.Windows.Input.ICommand SyncCommand { get; }
+    public System.Windows.Input.ICommand SyncThumbnailsCommand { get; }
+
+    private bool _isSyncingThumbnails;
+    public bool IsSyncingThumbnails
+    {
+        get => _isSyncingThumbnails;
+        set
+        {
+            _isSyncingThumbnails = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSyncThumbnails));
+            OnPropertyChanged(nameof(ThumbnailSyncProgressVisibility));
+        }
+    }
+
+    public bool CanSyncThumbnails => !IsSyncingThumbnails;
+    public Microsoft.UI.Xaml.Visibility ThumbnailSyncProgressVisibility => IsSyncingThumbnails ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    private string _thumbnailSyncProgressText = string.Empty;
+    public string ThumbnailSyncProgressText
+    {
+        get => _thumbnailSyncProgressText;
+        set { _thumbnailSyncProgressText = value; OnPropertyChanged(); }
+    }
 
     private bool _isImporting;
     public bool IsImporting
@@ -145,6 +177,9 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<ItemViewModel> Books { get; }
     public ObservableCollection<Shelf> Shelves { get; }
     public ObservableCollection<VolumeViewModel> Volumes { get; } = new();
+
+    public Microsoft.UI.Xaml.Visibility HasVolumes => Volumes.Count > 0 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility HasNoVolumes => Volumes.Count == 0 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
     public bool IsEmpty => !IsLoading && Books.Count == 0;
     public string TotalBooksCountText => $"{Books.Count} 冊";
@@ -313,6 +348,81 @@ public class MainViewModel : INotifyPropertyChanged
         {
             IsLoading = false;
         }
+    }
+
+    public async Task<ThumbnailSyncResult> SyncAllThumbnailsAsync(string? specificNasPath = null, CancellationToken cancellationToken = default)
+    {
+        IsSyncingThumbnails = true;
+        ThumbnailSyncProgressText = "NAS サムネイル共有フォルダを探索中...";
+        StatusMessage = "NAS サムネイル同期中...";
+
+        var aggregateResult = new ThumbnailSyncResult();
+        try
+        {
+            var roots = new List<string>();
+            if (!string.IsNullOrWhiteSpace(specificNasPath) && Directory.Exists(specificNasPath))
+            {
+                roots.Add(specificNasPath);
+            }
+            else
+            {
+                foreach (var vol in Volumes)
+                {
+                    string? root = ThumbnailStorageManager.FindDistributionRoot(vol.WindowsMountPath);
+                    if (root != null && !roots.Contains(root))
+                    {
+                        roots.Add(root);
+                    }
+                }
+            }
+
+            if (roots.Count == 0)
+            {
+                ThumbnailSyncProgressText = "NAS サムネイル配布フォルダ (ShelfRowThumbnails) が見つかりませんでした。";
+                StatusMessage = "NAS サムネイルフォルダが見つかりません";
+                return aggregateResult;
+            }
+
+            var progress = new Progress<ThumbnailSyncProgress>(p =>
+            {
+                ThumbnailSyncProgressText = $"サムネイルを取得中: {p.Processed} / {p.Total} 件";
+            });
+
+            foreach (var root in roots)
+            {
+                var res = await _thumbnailManager.SyncAllThumbnailsFromNasAsync(root, progress, maxConcurrency: 4, cancellationToken);
+                aggregateResult.TotalFoundInNas += res.TotalFoundInNas;
+                aggregateResult.Fetched += res.Fetched;
+                aggregateResult.AlreadyCached += res.AlreadyCached;
+                aggregateResult.Failed += res.Failed;
+            }
+
+            string msg = $"サムネイル同期完了: {aggregateResult.Fetched} 件取得、{aggregateResult.AlreadyCached} 件キャッシュ済み";
+            ThumbnailSyncProgressText = msg;
+            StatusMessage = msg;
+
+            if (aggregateResult.Fetched > 0)
+            {
+                RunOnUIThread(() =>
+                {
+                    foreach (var book in Books)
+                    {
+                        book.ReloadThumbnail();
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"サムネイル同期エラー: {ex.Message}";
+            ThumbnailSyncProgressText = $"エラー: {ex.Message}";
+        }
+        finally
+        {
+            IsSyncingThumbnails = false;
+        }
+
+        return aggregateResult;
     }
 
     private void RunOnUIThread(Action action)

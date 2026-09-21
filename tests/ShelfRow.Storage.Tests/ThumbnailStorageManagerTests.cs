@@ -113,6 +113,55 @@ public class ThumbnailStorageManagerTests : IDisposable
         Assert.Equal(dummyData, downloadedBytes);
     }
 
+    [Fact]
+    public async Task SyncAllThumbnailsFromNasAsync_DownloadsMissingThumbnailsInParallel()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");
+        var item1 = Guid.NewGuid();
+        var item2 = Guid.NewGuid();
+        var item3 = Guid.NewGuid();
+
+        // 1. Setup local files and upload to NAS
+        byte[] dummy = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x10, 0x20 };
+        await File.WriteAllBytesAsync(_manager.GetLocalThumbnailPath(item1), dummy);
+        await File.WriteAllBytesAsync(_manager.GetLocalThumbnailPath(item2), dummy);
+        await File.WriteAllBytesAsync(_manager.GetLocalThumbnailPath(item3), dummy);
+
+        await _manager.CopyToNasDistributionAsync(nasRoot, item1);
+        await _manager.CopyToNasDistributionAsync(nasRoot, item2);
+        await _manager.CopyToNasDistributionAsync(nasRoot, item3);
+
+        // 2. Write manifest
+        var manifest = new ThumbnailDistributionManifest();
+        manifest.SetEntry(item1, 1, dummy.Length);
+        manifest.SetEntry(item2, 1, dummy.Length);
+        manifest.SetEntry(item3, 1, dummy.Length);
+        await _manager.WriteManifestAsync(nasRoot, manifest);
+
+        // 3. Delete item1 and item2 from local, keep item3
+        File.Delete(_manager.GetLocalThumbnailPath(item1));
+        File.Delete(_manager.GetLocalThumbnailPath(item2));
+        Assert.False(_manager.HasLocalThumbnail(item1));
+        Assert.False(_manager.HasLocalThumbnail(item2));
+        Assert.True(_manager.HasLocalThumbnail(item3));
+
+        // 4. Run bulk sync
+        var progressReports = new System.Collections.Concurrent.ConcurrentBag<ThumbnailSyncProgress>();
+        var progress = new Progress<ThumbnailSyncProgress>(p => progressReports.Add(p));
+
+        var result = await _manager.SyncAllThumbnailsFromNasAsync(nasRoot, progress, maxConcurrency: 2);
+
+        // 5. Assertions
+        Assert.Equal(3, result.TotalFoundInNas);
+        Assert.Equal(2, result.Fetched);
+        Assert.Equal(1, result.AlreadyCached);
+        Assert.Equal(0, result.Failed);
+
+        Assert.True(_manager.HasLocalThumbnail(item1));
+        Assert.True(_manager.HasLocalThumbnail(item2));
+        Assert.True(_manager.HasLocalThumbnail(item3));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))

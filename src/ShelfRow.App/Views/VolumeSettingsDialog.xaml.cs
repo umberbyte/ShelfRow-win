@@ -1,5 +1,5 @@
 using System;
-using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,21 +20,61 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
         _windowHandle = windowHandle;
         this.InitializeComponent();
 
-        Volumes = _mainViewModel.Volumes;
+        VolumeItemsRepeater.ItemsSource = _mainViewModel.Volumes;
+        _mainViewModel.Volumes.CollectionChanged += (s, e) => UpdateEmptyState();
+        _mainViewModel.PropertyChanged += ViewModel_PropertyChanged;
+
+        UpdateEmptyState();
+        UpdateSyncProgress();
+
         PrimaryButtonClick += VolumeSettingsDialog_PrimaryButtonClick;
     }
 
-    public ObservableCollection<VolumeViewModel> Volumes { get; }
+    private void UpdateEmptyState()
+    {
+        bool hasVolumes = _mainViewModel.Volumes.Count > 0;
+        EmptyStatePanel.Visibility = hasVolumes ? Visibility.Collapsed : Visibility.Visible;
+        VolumeListScrollViewer.Visibility = hasVolumes ? Visibility.Visible : Visibility.Collapsed;
+    }
 
-    public Visibility HasVolumes => Volumes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility HasNoVolumes => Volumes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    private void UpdateSyncProgress()
+    {
+        SyncThumbnailsBtn.IsEnabled = !_mainViewModel.IsSyncingThumbnails;
+        SyncProgressPanel.Visibility = _mainViewModel.IsSyncingThumbnails ? Visibility.Visible : Visibility.Collapsed;
+        SyncProgressStatusText.Text = _mainViewModel.ThumbnailSyncProgressText;
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsSyncingThumbnails) ||
+            e.PropertyName == nameof(MainViewModel.ThumbnailSyncProgressText))
+        {
+            DispatcherQueue.TryEnqueue(UpdateSyncProgress);
+        }
+    }
+
+    private async void SyncThumbnails_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            foreach (var vol in _mainViewModel.Volumes)
+            {
+                await _mainViewModel.SaveVolumeAsync(vol);
+            }
+            await _mainViewModel.SyncAllThumbnailsAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"SyncThumbnails error: {ex.Message}");
+        }
+    }
 
     private async void VolumeSettingsDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         var deferral = args.GetDeferral();
         try
         {
-            foreach (var vol in Volumes)
+            foreach (var vol in _mainViewModel.Volumes)
             {
                 await _mainViewModel.SaveVolumeAsync(vol);
             }

@@ -81,6 +81,13 @@ public class ItemViewModel : INotifyPropertyChanged
         }
     }
 
+    public void ReloadThumbnail()
+    {
+        _thumbnailImage = null;
+        _isLoadingThumbnail = false;
+        OnPropertyChanged(nameof(ThumbnailImage));
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {

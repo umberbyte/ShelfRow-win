@@ -277,5 +277,174 @@ public class ThumbnailStorageManager
         await File.WriteAllTextAsync(tempPath, json, cancellationToken);
         File.Move(tempPath, manifestPath, overwrite: true);
     }
+
+    /// <summary>
+    /// Attempts to locate the ShelfRowThumbnails distribution root within or adjacent to a volume mount path.
+    /// </summary>
+    public static string? FindDistributionRoot(string? volumeWindowsPath)
+    {
+        if (string.IsNullOrWhiteSpace(volumeWindowsPath) || !Directory.Exists(volumeWindowsPath))
+            return null;
+
+        // 1. Direct subfolder: {Volume}\ShelfRowThumbnails
+        string direct = Path.Combine(volumeWindowsPath, DistributionFolderName);
+        if (Directory.Exists(direct))
+            return direct;
+
+        // 2. Sibling folder: e.g. \\NAS\ShelfRowThumbnails if volume is \\NAS\Books
+        try
+        {
+            var parent = Directory.GetParent(volumeWindowsPath);
+            if (parent != null && parent.Exists)
+            {
+                string sibling = Path.Combine(parent.FullName, DistributionFolderName);
+                if (Directory.Exists(sibling))
+                    return sibling;
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Synchronizes missing thumbnails from NAS distribution root to local cache in parallel.
+    /// Uses manifest index if available, with sharded directory scan fallback.
+    /// </summary>
+    public async Task<ThumbnailSyncResult> SyncAllThumbnailsFromNasAsync(
+        string nasDistributionRoot,
+        IProgress<ThumbnailSyncProgress>? progress = null,
+        int maxConcurrency = 4,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new ThumbnailSyncResult();
+        if (!Directory.Exists(nasDistributionRoot))
+            return result;
+
+        // 1. Gather all candidates to sync
+        var candidates = new List<(Guid ItemId, long ExpectedBytes)>();
+
+        var manifest = await ReadManifestAsync(nasDistributionRoot, cancellationToken);
+        if (manifest != null && manifest.Entries.Count > 0)
+        {
+            foreach (var (key, entry) in manifest.Entries)
+            {
+                if (Guid.TryParse(key, out var itemId))
+                {
+                    candidates.Add((itemId, entry.Bytes));
+                }
+            }
+        }
+        else
+        {
+            // Sharded scan fallback: look through 256 subdirectories
+            foreach (var shardDir in Directory.EnumerateDirectories(nasDistributionRoot))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var file in Directory.EnumerateFiles(shardDir, "*.jpg"))
+                {
+                    string fname = Path.GetFileNameWithoutExtension(file);
+                    if (Guid.TryParse(fname, out var itemId))
+                    {
+                        var info = new FileInfo(file);
+                        candidates.Add((itemId, info.Length));
+                    }
+                }
+            }
+        }
+
+        result.TotalFoundInNas = candidates.Count;
+        if (candidates.Count == 0)
+            return result;
+
+        // 2. Filter for items not cached locally or with 0 bytes
+        var missing = new List<(Guid ItemId, long ExpectedBytes)>();
+        foreach (var item in candidates)
+        {
+            string localPath = GetLocalThumbnailPath(item.ItemId);
+            if (!File.Exists(localPath))
+            {
+                missing.Add(item);
+            }
+            else
+            {
+                var fi = new FileInfo(localPath);
+                if (fi.Length == 0)
+                {
+                    missing.Add(item);
+                }
+                else
+                {
+                    result.AlreadyCached++;
+                }
+            }
+        }
+
+        if (missing.Count == 0)
+            return result;
+
+        // 3. Parallel download using SemaphoreSlim
+        using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+        int processedCount = 0;
+        int fetchedCount = 0;
+        int failedCount = 0;
+
+        var tasks = missing.Select(async target =>
+        {
+            await semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                bool copied = await CopyFromNasDistributionAsync(nasDistributionRoot, target.ItemId, cancellationToken);
+                if (copied)
+                {
+                    Interlocked.Increment(ref fetchedCount);
+                }
+                else
+                {
+                    Interlocked.Increment(ref failedCount);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                Interlocked.Increment(ref failedCount);
+            }
+            finally
+            {
+                int current = Interlocked.Increment(ref processedCount);
+                progress?.Report(new ThumbnailSyncProgress
+                {
+                    Processed = current,
+                    Total = missing.Count,
+                    CurrentItemId = target.ItemId.ToString("D")
+                });
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        result.Fetched = fetchedCount;
+        result.Failed = failedCount;
+        return result;
+    }
+}
+
+public class ThumbnailSyncProgress
+{
+    public int Processed { get; set; }
+    public int Total { get; set; }
+    public string CurrentItemId { get; set; } = string.Empty;
+}
+
+public class ThumbnailSyncResult
+{
+    public int TotalFoundInNas { get; set; }
+    public int Fetched { get; set; }
+    public int AlreadyCached { get; set; }
+    public int Failed { get; set; }
 }
 

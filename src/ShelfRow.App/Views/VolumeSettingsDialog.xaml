@@ -11,10 +11,11 @@
     DefaultButton="Primary"
     CloseButtonText="キャンセル">
 
-    <Grid Width="580" MaxHeight="500" Margin="0,8,0,0">
+    <Grid Width="580" MaxHeight="520" Margin="0,8,0,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Description -->
@@ -26,12 +27,12 @@
                    Margin="0,0,0,16" />
 
         <!-- Empty State -->
-        <StackPanel Grid.Row="1"
+        <StackPanel x:Name="EmptyStatePanel"
+                    Grid.Row="1"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="12"
-                    Padding="40"
-                    Visibility="{x:Bind HasNoVolumes, Mode=OneWay}">
+                    Padding="40">
             <FontIcon Glyph="&#xE838;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
             <TextBlock Text="管理されているボリュームがありません"
                        FontSize="15"
@@ -44,8 +45,8 @@
         </StackPanel>
 
         <!-- Volume List -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="{x:Bind HasVolumes, Mode=OneWay}">
-            <ItemsRepeater ItemsSource="{x:Bind Volumes, Mode=OneWay}">
+        <ScrollViewer x:Name="VolumeListScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsRepeater x:Name="VolumeItemsRepeater">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="vm:VolumeViewModel">
                         <Border Margin="0,0,0,12"
@@ -142,5 +143,49 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
         </ScrollViewer>
+
+        <!-- Thumbnail Distribution Cache Sync Section -->
+        <Border Grid.Row="2"
+                Margin="0,12,0,0"
+                Padding="14"
+                Background="{ThemeResource LayerFillColorAltBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
+                    <TextBlock Text="サムネイル共有キャッシュ (ShelfRowThumbnails)"
+                               FontWeight="SemiBold"
+                               FontSize="13" />
+                    <TextBlock Text="NAS から未取得の書影画像をローカルへ一括同期します。"
+                               FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <Button x:Name="SyncThumbnailsBtn"
+                        Grid.Row="0" Grid.Column="1"
+                        Content="サムネイルを一括同期"
+                        Click="SyncThumbnails_Click" />
+
+                <StackPanel x:Name="SyncProgressPanel"
+                            Grid.Row="1" Grid.ColumnSpan="2"
+                            Spacing="6"
+                            Visibility="Collapsed">
+                    <ProgressBar IsIndeterminate="True" />
+                    <TextBlock x:Name="SyncProgressStatusText"
+                               FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </ContentDialog>
