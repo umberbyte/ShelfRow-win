@@ -38,7 +38,7 @@ public class CloudKitAccount
         _webAuth = webAuth ?? throw new ArgumentNullException(nameof(webAuth));
 
         _client.WebAuthTokenRenewed += token =>
-            _ = _secureStorage.SetSecretAsync(WebAuthTokenKey, token);
+            _ = _secureStorage.SetSecretAsync(EnvironmentKey(WebAuthTokenKey), token);
     }
 
     /// <summary>The container cannot be reached at all without an API token.</summary>
@@ -49,30 +49,48 @@ public class CloudKitAccount
     public string Environment
     {
         get => _client.Configuration.Environment;
-        set => _client.Configuration.Environment = value;
+        set
+        {
+            string normalized = NormalizeEnvironment(value);
+            if (string.Equals(_client.Configuration.Environment, normalized, StringComparison.Ordinal))
+                return;
+
+            _client.Configuration.Environment = normalized;
+            // API and user tokens are issued for one CloudKit environment. Never
+            // send a development credential to production (or vice versa).
+            _client.Configuration.ApiToken = null;
+            _client.Configuration.WebAuthToken = null;
+        }
     }
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        // Falling back to the built-in token means a fresh install is ready to sign in,
-        // with no credential for the user to go and find first.
-        _client.Configuration.ApiToken =
-            await _secureStorage.GetSecretAsync(ApiTokenKey, cancellationToken)
-            ?? CloudKitConfiguration.DefaultApiToken;
+        string environment = NormalizeEnvironment(Environment);
+        _client.Configuration.Environment = environment;
 
-        _client.Configuration.WebAuthToken = await _secureStorage.GetSecretAsync(WebAuthTokenKey, cancellationToken);
+        // A fresh install is ready to sign in to either environment. Overrides and
+        // user tokens remain environment-specific so switching cannot poison auth.
+        _client.Configuration.ApiToken =
+            await _secureStorage.GetSecretAsync(EnvironmentKey(ApiTokenKey), cancellationToken)
+            ?? CloudKitConfiguration.BuiltInApiTokenFor(environment);
+
+        _client.Configuration.WebAuthToken =
+            await _secureStorage.GetSecretAsync(EnvironmentKey(WebAuthTokenKey), cancellationToken);
     }
 
     public async Task SetApiTokenAsync(string apiToken, CancellationToken cancellationToken = default)
     {
         apiToken = apiToken.Trim();
         _client.Configuration.ApiToken = apiToken;
-        await _secureStorage.SetSecretAsync(ApiTokenKey, apiToken, cancellationToken);
+        await _secureStorage.SetSecretAsync(EnvironmentKey(ApiTokenKey), apiToken, cancellationToken);
     }
 
     public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
         _client.Configuration.WebAuthToken = null;
+        await _secureStorage.DeleteSecretAsync(EnvironmentKey(WebAuthTokenKey), cancellationToken);
+        // Remove credentials written by versions that did not distinguish the
+        // environments. They are unsafe to adopt because their origin is unknown.
         await _secureStorage.DeleteSecretAsync(WebAuthTokenKey, cancellationToken);
     }
 
@@ -90,18 +108,60 @@ public class CloudKitAccount
         {
             return await operation(cancellationToken);
         }
+        catch (CloudKitException ex) when (
+            ex.IsAuthenticationRequired
+            && ex.RedirectUrl is null
+            && !string.IsNullOrEmpty(_client.Configuration.WebAuthToken))
+        {
+            // CloudKit commonly reports an expired or wrong-environment web token
+            // as AUTHENTICATION_FAILED without a redirect. Retry without it; that
+            // response supplies the fresh sign-in URL.
+            await ClearWebAuthTokenAsync(cancellationToken);
+            try
+            {
+                return await operation(cancellationToken);
+            }
+            catch (CloudKitException retryEx) when (retryEx.IsAuthenticationRequired && retryEx.RedirectUrl != null)
+            {
+                return await SignInAndRetryAsync(operation, retryEx.RedirectUrl, cancellationToken);
+            }
+        }
         catch (CloudKitException ex) when (ex.IsAuthenticationRequired && ex.RedirectUrl != null)
         {
-            string? token = await _webAuth.RequestWebAuthTokenAsync(ex.RedirectUrl, cancellationToken);
-            if (string.IsNullOrEmpty(token))
-                throw;
-
-            _client.Configuration.WebAuthToken = token;
-            await _secureStorage.SetSecretAsync(WebAuthTokenKey, token, cancellationToken);
-
-            return await operation(cancellationToken);
+            return await SignInAndRetryAsync(operation, ex.RedirectUrl, cancellationToken);
         }
     }
+
+    private async Task<T> SignInAndRetryAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        string redirectUrl,
+        CancellationToken cancellationToken)
+    {
+        string? token = await _webAuth.RequestWebAuthTokenAsync(redirectUrl, cancellationToken);
+        if (string.IsNullOrEmpty(token))
+            throw new CloudKitException(
+                System.Net.HttpStatusCode.Unauthorized,
+                "AUTHENTICATION_REQUIRED",
+                "Apple ID sign-in was cancelled or did not return a token.",
+                redirectUrl);
+
+        _client.Configuration.WebAuthToken = token;
+        await _secureStorage.SetSecretAsync(EnvironmentKey(WebAuthTokenKey), token, cancellationToken);
+        return await operation(cancellationToken);
+    }
+
+    private async Task ClearWebAuthTokenAsync(CancellationToken cancellationToken)
+    {
+        _client.Configuration.WebAuthToken = null;
+        await _secureStorage.DeleteSecretAsync(EnvironmentKey(WebAuthTokenKey), cancellationToken);
+    }
+
+    private string EnvironmentKey(string key) => $"{key}:{NormalizeEnvironment(Environment)}";
+
+    private static string NormalizeEnvironment(string environment) =>
+        environment.Equals("production", StringComparison.OrdinalIgnoreCase)
+            ? "production"
+            : "development";
 
     public Task<CKModifyZonesResponse> DeleteCoreDataZoneAsync(CancellationToken cancellationToken = default)
         => ExecuteAsync(ct => _client.DeleteCoreDataZoneAsync(ct), cancellationToken);

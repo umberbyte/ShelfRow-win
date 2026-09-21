@@ -155,6 +155,17 @@ public class MainViewModel : INotifyPropertyChanged
         foreach (string stamp in stamps) Stamps.Add(stamp);
     }
 
+    public void SaveMainWindowSize(int width, int height)
+    {
+        if (width <= 0 || height <= 0
+            || (Settings.MainWindowWidth == width && Settings.MainWindowHeight == height))
+            return;
+
+        Settings.MainWindowWidth = width;
+        Settings.MainWindowHeight = height;
+        _settingsService.Save();
+    }
+
     public void ApplyStamp(string field, string stamp)
     {
         if (SelectedItem is null || string.IsNullOrEmpty(stamp)) return;
@@ -910,7 +921,9 @@ public class MainViewModel : INotifyPropertyChanged
         }
         catch (CloudKitException ex) when (ex.IsAuthenticationRequired)
         {
-            StatusMessage = "iCloud: サインインが完了していません。";
+            StatusMessage = ex.RedirectUrl is null
+                ? $"iCloud: {ex.ServerErrorCode}。選択した環境のAPIトークンを確認してください。"
+                : "iCloud: サインインが完了していません。";
             App.Log($"Sync: authentication not completed. code={ex.ServerErrorCode} hasRedirect={ex.RedirectUrl != null}");
         }
         catch (CloudKitException ex)

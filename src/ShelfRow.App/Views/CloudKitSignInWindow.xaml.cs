@@ -15,7 +15,7 @@ public sealed partial class CloudKitSignInWindow : Window
     /// Must match the Sign In Callback registered on the API token in CloudKit Console.
     /// Nothing serves this address; the navigation to it is intercepted here.
     /// </summary>
-    public const string CallbackUrlPrefix = "http://localhost:49152/";
+    public const string CallbackUrl = "https://localhost:49152/shelfrow-auth";
 
     private readonly TaskCompletionSource<string?> _result = new();
     private readonly string _signInUrl;
@@ -58,7 +58,7 @@ public sealed partial class CloudKitSignInWindow : Window
 
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {
-        if (!args.Uri.StartsWith(CallbackUrlPrefix, StringComparison.OrdinalIgnoreCase))
+        if (!IsCallbackUrl(args.Uri))
             return;
 
         // The callback address has no server behind it, so letting the navigation run
@@ -70,6 +70,17 @@ public sealed partial class CloudKitSignInWindow : Window
 
         _result.TrySetResult(token);
         Close();
+    }
+
+    private static bool IsCallbackUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+               && uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+               && uri.Port == 49152
+               && uri.AbsolutePath.TrimEnd('/').Equals("/shelfrow-auth", StringComparison.Ordinal);
     }
 
     private static string? ExtractToken(string callbackUrl)

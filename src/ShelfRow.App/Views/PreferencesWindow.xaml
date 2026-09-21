@@ -276,7 +276,7 @@
 
                                     <Expander Header="別のコンテナに接続する (通常は不要)" HorizontalAlignment="Stretch">
                                         <StackPanel Spacing="8" Padding="0,8">
-                                            <TextBlock Text="API トークンはアプリに組み込まれています。別の CloudKit コンテナを使う場合だけ、そのトークン (16進64文字) を入力してください。Sign In Callback に http://localhost:49152/shelfrow-auth の登録が必要です。"
+                                            <TextBlock Text="development / production のAPIトークンはアプリに組み込まれています。別の CloudKit コンテナを使う場合だけ、そのトークン (16進64文字) を入力してください。Sign In Callback に https://localhost:49152/shelfrow-auth の登録が必要です。"
                                                        FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             <PasswordBox x:Name="TxtCloudApiToken" PlaceholderText="API トークン (省略可)" HorizontalAlignment="Stretch" />
                                         </StackPanel>

@@ -382,15 +382,15 @@ public sealed partial class PreferencesWindow : Window
         var account = App.CloudKitAccount;
         if (account == null) return;
 
+        account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
+        _settings.CloudKitEnvironment = account.Environment;
+        _settingsService.Save(_settings);
+
         string token = TxtCloudApiToken.Password.Trim();
         if (token.Length > 0)
             await account.SetApiTokenAsync(token);
         else
             await account.LoadAsync();
-
-        account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
-        _settings.CloudKitEnvironment = account.Environment;
-        _settingsService.Save(_settings);
 
         // Signing in has no endpoint of its own: the sign-in page is reached by making a
         // real request and following the redirect the server answers with.
@@ -402,7 +402,10 @@ public sealed partial class PreferencesWindow : Window
     private async void CloudSignOut_Click(object sender, RoutedEventArgs e)
     {
         if (App.CloudKitAccount is { } account)
+        {
+            account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
             await account.SignOutAsync();
+        }
 
         await RefreshCloudAuthStatusAsync();
     }

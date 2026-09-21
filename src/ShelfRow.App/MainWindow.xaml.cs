@@ -18,6 +18,8 @@ public sealed partial class MainWindow : Window
     private MainViewModel? _viewModel;
     private PreferencesWindow? _preferencesWindow;
     private string _stampTarget = "KeywordA";
+    private int _lastRestoredWidth = 1280;
+    private int _lastRestoredHeight = 800;
 
     public MainWindow()
     {
@@ -35,6 +37,7 @@ public sealed partial class MainWindow : Window
         var enterHandler = new Microsoft.UI.Xaml.Input.KeyEventHandler(BookList_KeyDown);
         BookGridView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
         BookListView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
+        AppWindow.Changed += MainWindow_Changed;
         AppWindow.Closing += MainWindow_Closing;
     }
 
@@ -56,6 +59,7 @@ public sealed partial class MainWindow : Window
                 _viewModel.OpenSettingsRequested += ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification += ViewModel_ImportCompletedNotification;
                 _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+                ApplySavedWindowSize();
                 ApplyDisplaySettings();
                 ApplyStartupLock();
             }
@@ -94,6 +98,8 @@ public sealed partial class MainWindow : Window
 
     private void MainWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {
+        SaveWindowSize();
+
         if (_viewModel?.Settings.CloseOnExit != false)
         {
             _preferencesWindow?.Close();
@@ -107,6 +113,45 @@ public sealed partial class MainWindow : Window
         if (sender.Presenter is OverlappedPresenter presenter)
             presenter.Minimize();
     }
+
+    private void ApplySavedWindowSize()
+    {
+        if (_viewModel is null) return;
+
+        int maxWidth = 10000;
+        int maxHeight = 10000;
+        try
+        {
+            var display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            maxWidth = Math.Max(640, display.WorkArea.Width);
+            maxHeight = Math.Max(480, display.WorkArea.Height);
+        }
+        catch
+        {
+        }
+
+        int minWidth = Math.Min(960, maxWidth);
+        int minHeight = Math.Min(600, maxHeight);
+        _lastRestoredWidth = Math.Clamp(_viewModel.Settings.MainWindowWidth, minWidth, maxWidth);
+        _lastRestoredHeight = Math.Clamp(_viewModel.Settings.MainWindowHeight, minHeight, maxHeight);
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(_lastRestoredWidth, _lastRestoredHeight));
+    }
+
+    private void MainWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidSizeChange)
+            return;
+
+        if (sender.Presenter is OverlappedPresenter presenter
+            && presenter.State != OverlappedPresenterState.Restored)
+            return;
+
+        _lastRestoredWidth = sender.Size.Width;
+        _lastRestoredHeight = sender.Size.Height;
+    }
+
+    private void SaveWindowSize() =>
+        _viewModel?.SaveMainWindowSize(_lastRestoredWidth, _lastRestoredHeight);
 
     private void ApplyStartupLock()
     {

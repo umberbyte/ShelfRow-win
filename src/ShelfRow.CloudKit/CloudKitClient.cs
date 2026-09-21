@@ -27,13 +27,22 @@ public class CloudKitConfiguration
     /// user's own Apple ID sign-in. Making each person find and paste this would be a
     /// chore that buys no safety.
     /// </summary>
-    public const string DefaultApiToken = "e0c24a83106304e699285699f1efa6b660fb9c753289d514102edcb24dc9a91c";
+    public const string DevelopmentApiToken = "e0c24a83106304e699285699f1efa6b660fb9c753289d514102edcb24dc9a91c";
+    public const string ProductionApiToken = "b0123ff1bf52276f7a5fb81b0206698493b69a9b48d70aace43097e435b6d269";
+
+    // Kept for source compatibility with the probe and existing callers.
+    public const string DefaultApiToken = DevelopmentApiToken;
+
+    public static string BuiltInApiTokenFor(string environment) =>
+        environment.Equals("production", StringComparison.OrdinalIgnoreCase)
+            ? ProductionApiToken
+            : DevelopmentApiToken;
 
     /// <summary>
     /// Required on every request, including ones that also carry a web auth token.
     /// Overridable so a different container can be pointed at without a rebuild.
     /// </summary>
-    public string? ApiToken { get; set; } = DefaultApiToken;
+    public string? ApiToken { get; set; } = DevelopmentApiToken;
 
     /// <summary>
     /// Identifies the signed-in Apple ID. Required for the private database.

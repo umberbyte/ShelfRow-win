@@ -97,6 +97,8 @@ public class AppSettings
     public bool MainViewIsGrid { get; set; } = true;
     public string MainSortKey { get; set; } = "Title"; // Title, Rating, Author, AddedDate, Pages
     public bool MainSortAscending { get; set; } = true;
+    public int MainWindowWidth { get; set; } = 1280;
+    public int MainWindowHeight { get; set; } = 800;
 
     // Helper methods to get effective names
     public string GetEffectiveTypeName(int index) => index switch
