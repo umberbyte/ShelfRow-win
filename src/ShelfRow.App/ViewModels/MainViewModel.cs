@@ -123,6 +123,7 @@ public class MainViewModel : INotifyPropertyChanged
             await _repository.UpsertItemsBatchAsync(result.ImportedBooks, cancellationToken);
 
             ImportProgressText = "ライブラリを更新中...";
+            await LoadVolumesAsync(cancellationToken);
             await LoadShelvesAsync(cancellationToken);
             await RefreshBooksAsync(cancellationToken);
 
@@ -143,6 +144,7 @@ public class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<ItemViewModel> Books { get; }
     public ObservableCollection<Shelf> Shelves { get; }
+    public ObservableCollection<VolumeViewModel> Volumes { get; } = new();
 
     public bool IsEmpty => !IsLoading && Books.Count == 0;
     public string TotalBooksCountText => $"{Books.Count} 冊";
@@ -211,6 +213,10 @@ public class MainViewModel : INotifyPropertyChanged
             await LoadShelvesAsync(cancellationToken);
             Log("LoadShelvesAsync finished");
 
+            Log("LoadVolumesAsync starting");
+            await LoadVolumesAsync(cancellationToken);
+            Log("LoadVolumesAsync finished");
+
             Log("RefreshBooksAsync starting");
             await RefreshBooksAsync(cancellationToken);
             Log($"RefreshBooksAsync finished, {Books.Count} books");
@@ -240,6 +246,25 @@ public class MainViewModel : INotifyPropertyChanged
                 Shelves.Add(s);
             }
         });
+    }
+
+    public async Task LoadVolumesAsync(CancellationToken cancellationToken = default)
+    {
+        var list = await _repository.GetVolumesAsync(cancellationToken);
+        RunOnUIThread(() =>
+        {
+            Volumes.Clear();
+            foreach (var v in list)
+            {
+                Volumes.Add(new VolumeViewModel(v));
+            }
+        });
+    }
+
+    public async Task SaveVolumeAsync(VolumeViewModel volumeVm, CancellationToken cancellationToken = default)
+    {
+        await _repository.UpsertVolumeAsync(volumeVm.Model, cancellationToken);
+        volumeVm.CheckAccessibility();
     }
 
     public async Task RefreshBooksAsync(CancellationToken cancellationToken = default)

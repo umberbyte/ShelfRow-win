@@ -54,6 +54,9 @@
                         <TextBlock Text="同期" />
                     </StackPanel>
                 </Button>
+                <Button Click="SettingsButton_Click" ToolTipService.ToolTip="NAS ボリューム設定">
+                    <FontIcon Glyph="&#xE713;" FontSize="14" />
+                </Button>
             </StackPanel>
         </Grid>
 
@@ -64,6 +67,7 @@
                         IsSettingsVisible="True"
                         PaneDisplayMode="Left"
                         OpenPaneLength="220"
+                        ItemInvoked="NavView_ItemInvoked"
                         SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="すべての書籍" Tag="all_books">

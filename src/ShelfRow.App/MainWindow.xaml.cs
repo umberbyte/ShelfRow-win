@@ -106,6 +106,38 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenVolumeSettingsDialogAsync();
+    }
+
+    private async void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (args.IsSettingsInvoked)
+        {
+            await OpenVolumeSettingsDialogAsync();
+        }
+    }
+
+    private async Task OpenVolumeSettingsDialogAsync()
+    {
+        if (_viewModel == null || this.Content?.XamlRoot == null) return;
+
+        try
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            var dialog = new ShelfRow.App.Views.VolumeSettingsDialog(_viewModel, hwnd)
+            {
+                XamlRoot = this.Content.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to open VolumeSettingsDialog: {ex.Message}");
+        }
+    }
+
     private void PopulateShelvesInNav()
     {
         if (_viewModel == null) return;
