@@ -16,6 +16,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly IShelfRowRepository _repository;
     private readonly ThumbnailStorageManager _thumbnailManager;
     private readonly CloudKitSyncEngine _syncEngine;
+    private readonly Services.ThumbnailImageLoader? _imageLoader;
 
     private bool _isLoading;
     private string _searchQuery = string.Empty;
@@ -26,18 +27,33 @@ public class MainViewModel : INotifyPropertyChanged
     public MainViewModel(
         IShelfRowRepository repository,
         ThumbnailStorageManager thumbnailManager,
-        CloudKitSyncEngine syncEngine)
+        CloudKitSyncEngine syncEngine,
+        Services.ThumbnailImageLoader? imageLoader = null)
     {
         _repository = repository;
         _thumbnailManager = thumbnailManager;
         _syncEngine = syncEngine;
+        _imageLoader = imageLoader;
 
         Books = new ObservableCollection<ItemViewModel>();
         Shelves = new ObservableCollection<Shelf>();
+
+        Books.CollectionChanged += (s, e) =>
+        {
+            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(TotalBooksCountText));
+        };
+
+        SyncCommand = new RelayCommand(async () => await SyncWithCloudKitAsync());
     }
+
+    public System.Windows.Input.ICommand SyncCommand { get; }
 
     public ObservableCollection<ItemViewModel> Books { get; }
     public ObservableCollection<Shelf> Shelves { get; }
+
+    public bool IsEmpty => !IsLoading && Books.Count == 0;
+    public string TotalBooksCountText => $"{Books.Count} 冊";
 
     public bool IsLoading
     {
@@ -132,7 +148,7 @@ public class MainViewModel : INotifyPropertyChanged
 
             foreach (var item in items)
             {
-                Books.Add(new ItemViewModel(item, _thumbnailManager));
+                Books.Add(new ItemViewModel(item, _thumbnailManager, _imageLoader));
             }
         }
         finally
