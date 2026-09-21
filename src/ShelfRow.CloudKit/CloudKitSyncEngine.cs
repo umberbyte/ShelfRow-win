@@ -21,6 +21,87 @@ public class CloudKitSyncEngine
 
     public record SyncResult(int Items, int Shelves, int Volumes, int Links, int Deletions);
 
+    public record UploadResult(int Uploaded, int Conflicted, int Failed);
+
+    /// <summary>
+    /// CloudKit rejects a modify request carrying more operations than this.
+    /// </summary>
+    private const int ModifyBatchSize = 200;
+
+    /// <summary>
+    /// Sends rows edited on this machine. Each row quotes the record version it was last
+    /// seen at, so a record another device changed in the meantime is refused rather than
+    /// overwritten; it stays queued and the next download brings the newer copy.
+    /// </summary>
+    public async Task<UploadResult> SyncUpAsync(IProgress<int>? progress = null, CancellationToken cancellationToken = default)
+    {
+        int uploaded = 0, conflicted = 0, failed = 0;
+
+        while (true)
+        {
+            var pending = await _repository.GetPendingUploadsAsync(ModifyBatchSize, cancellationToken);
+            if (pending.Count == 0)
+                break;
+
+            var owners = new Dictionary<string, (string Table, Guid Id)>(StringComparer.Ordinal);
+            var request = new CKModifyRecordsRequest();
+
+            foreach (var item in pending.Items)
+                AddOperation(request, owners, CloudKitMapper.ToCKRecord(item), "Items", item.Id);
+
+            foreach (var shelf in pending.Shelves)
+                AddOperation(request, owners, CloudKitMapper.ToCKRecord(shelf), "Shelves", shelf.Id);
+
+            foreach (var volume in pending.Volumes)
+                AddOperation(request, owners, CloudKitMapper.ToCKRecord(volume), "Volumes", volume.Id);
+
+            var response = await _client.ModifyRecordsAsync(request, cancellationToken);
+
+            foreach (var record in response.Records ?? new List<CKRecord>())
+            {
+                if (!owners.TryGetValue(record.RecordName, out var owner))
+                    continue;
+
+                if (record.ServerErrorCode != null)
+                {
+                    if (record.ServerErrorCode == "CONFLICT")
+                        conflicted++;
+                    else
+                        failed++;
+                    continue;
+                }
+
+                await _repository.ConfirmUploadedAsync(owner.Table, owner.Id, record.RecordName, record.RecordChangeTag, cancellationToken);
+                uploaded++;
+            }
+
+            progress?.Report(uploaded);
+
+            // Everything refused stays flagged, so without this the same batch would be
+            // retried forever.
+            if (uploaded == 0)
+                break;
+        }
+
+        return new UploadResult(uploaded, conflicted, failed);
+    }
+
+    private static void AddOperation(
+        CKModifyRecordsRequest request,
+        Dictionary<string, (string Table, Guid Id)> owners,
+        CKRecord record,
+        string table,
+        Guid id)
+    {
+        request.Operations.Add(new CKRecordOperation
+        {
+            OperationType = record.RecordChangeTag == null ? "create" : "update",
+            Record = record
+        });
+
+        owners[record.RecordName] = (table, id);
+    }
+
     /// <summary>
     /// Pulls every change since the stored sync token. Shelf membership and volume
     /// references are resolved after the records land, because the zone delivers them as
@@ -74,7 +155,7 @@ public class CloudKitSyncEngine
                         case CloudKitMapper.ShelfRecordType:
                             if (CloudKitMapper.ToShelf(record) is { } shelf)
                             {
-                                await _repository.UpsertShelfAsync(shelf, cancellationToken);
+                                await _repository.UpsertShelfAsync(shelf, markPendingUpload: false, cancellationToken);
                                 shelves++;
                             }
                             break;
@@ -82,7 +163,7 @@ public class CloudKitSyncEngine
                         case CloudKitMapper.VolumeRecordType:
                             if (CloudKitMapper.ToVolume(record) is { } volume)
                             {
-                                await _repository.UpsertVolumeAsync(volume, cancellationToken);
+                                await _repository.UpsertVolumeAsync(volume, markPendingUpload: false, cancellationToken);
                                 volumes++;
                             }
                             break;
@@ -100,7 +181,7 @@ public class CloudKitSyncEngine
                 }
 
                 if (itemsBatch.Count > 0)
-                    await _repository.UpsertItemsBatchAsync(itemsBatch, cancellationToken);
+                    await _repository.UpsertItemsBatchAsync(itemsBatch, markPendingUpload: false, cancellationToken);
 
                 progress?.Report(processed);
             }

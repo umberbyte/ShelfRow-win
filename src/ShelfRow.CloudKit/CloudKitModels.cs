@@ -55,6 +55,19 @@ public class CKRecord
     [JsonPropertyName("deleted")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Deleted { get; set; }
+
+    /// <summary>
+    /// Set on a record in a modify response that the server refused. A write can fail
+    /// for one record while the rest of the batch succeeds, so the failure is reported
+    /// per record rather than for the request.
+    /// </summary>
+    [JsonPropertyName("serverErrorCode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ServerErrorCode { get; set; }
+
+    [JsonPropertyName("reason")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Reason { get; set; }
 }
 
 public class CKChangesZoneRequest

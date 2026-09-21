@@ -281,6 +281,90 @@ public class SqliteShelfRowRepositoryTests : IDisposable
         Assert.Equal("In the shelf", matched[0].Title);
     }
 
+    /// <summary>
+    /// An edit made here has to reach iCloud; a record that came from iCloud must not be
+    /// sent straight back.
+    /// </summary>
+    [Fact]
+    public async Task OnlyLocalEdits_AreQueuedForUpload()
+    {
+        await _repository.InitializeAsync();
+
+        var fromCloud = new Item { Title = "From iCloud", RelativePath = "a.zip", CloudKitRecordName = "R1" };
+        await _repository.UpsertItemsBatchAsync(new[] { fromCloud }, markPendingUpload: false);
+
+        var editedHere = new Item { Title = "Edited here", RelativePath = "b.zip" };
+        await _repository.UpsertItemAsync(editedHere);
+
+        var pending = await _repository.GetPendingUploadsAsync();
+
+        Assert.Single(pending.Items);
+        Assert.Equal("Edited here", pending.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task ConfirmUploaded_ClearsTheQueueAndStoresTheServerVersion()
+    {
+        await _repository.InitializeAsync();
+
+        var item = new Item { Title = "Edited here", RelativePath = "a.zip" };
+        await _repository.UpsertItemAsync(item);
+
+        await _repository.ConfirmUploadedAsync("Items", item.Id, "SERVER-RECORD-NAME", "tag-2");
+
+        var pending = await _repository.GetPendingUploadsAsync();
+        Assert.Empty(pending.Items);
+
+        var stored = await _repository.GetItemByIdAsync(item.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("SERVER-RECORD-NAME", stored.CloudKitRecordName);
+        Assert.Equal("tag-2", stored.CloudKitChangeTag);
+    }
+
+    /// <summary>
+    /// A download landing on top of an edit that has not gone up yet must not drop it,
+    /// or the edit would be lost with no sign that anything happened.
+    /// </summary>
+    [Fact]
+    public async Task IncomingRecord_DoesNotClearAnUnsentLocalEdit()
+    {
+        await _repository.InitializeAsync();
+
+        var item = new Item { Title = "Edited here", RelativePath = "a.zip" };
+        await _repository.UpsertItemAsync(item);
+
+        await _repository.UpsertItemsBatchAsync(new[]
+        {
+            new Item { Id = item.Id, Title = "Server copy", RelativePath = "a.zip", CloudKitRecordName = "R1" }
+        }, markPendingUpload: false);
+
+        var pending = await _repository.GetPendingUploadsAsync();
+        Assert.Single(pending.Items);
+    }
+
+    [Fact]
+    public async Task MarkAllPendingUpload_QueuesEveryRow()
+    {
+        await _repository.InitializeAsync();
+
+        await _repository.UpsertItemsBatchAsync(new[]
+        {
+            new Item { Title = "a", RelativePath = "a.zip" },
+            new Item { Title = "b", RelativePath = "b.zip" }
+        }, markPendingUpload: false);
+        await _repository.UpsertShelfAsync(new Shelf { Title = "s" }, markPendingUpload: false);
+        await _repository.UpsertVolumeAsync(new Volume { Name = "v" }, markPendingUpload: false);
+
+        Assert.Equal(0, (await _repository.GetPendingUploadsAsync()).Count);
+
+        await _repository.MarkAllPendingUploadAsync();
+
+        var pending = await _repository.GetPendingUploadsAsync();
+        Assert.Equal(2, pending.Items.Count);
+        Assert.Single(pending.Shelves);
+        Assert.Single(pending.Volumes);
+    }
+
     public void Dispose()
     {
         _repository.Dispose();

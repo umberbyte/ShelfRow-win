@@ -699,6 +699,13 @@ public class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
+            // Send local edits first, so the download that follows brings back the
+            // server's view of them rather than overwriting them with a stale copy.
+            var uploadProgress = new Progress<int>(n => StatusMessage = $"iCloudへ送信中... {n:N0} 件");
+            var upload = await _cloudKitAccount.ExecuteAsync(
+                ct => _syncEngine.SyncUpAsync(uploadProgress, ct),
+                cancellationToken);
+
             var progress = new Progress<int>(n => StatusMessage = $"iCloudと同期中... {n:N0} 件");
 
             var result = await _cloudKitAccount.ExecuteAsync(
@@ -709,9 +716,16 @@ public class MainViewModel : INotifyPropertyChanged
             await LoadShelvesAsync();
             await LoadVolumesAsync();
 
-            StatusMessage = result.Items == 0 && result.Shelves == 0 && result.Volumes == 0 && result.Deletions == 0
-                ? "iCloud同期完了: 変更はありません"
-                : $"iCloud同期完了: 本 {result.Items:N0} 件 / 本棚 {result.Shelves} / ボリューム {result.Volumes}";
+            string downText = result.Items == 0 && result.Shelves == 0 && result.Volumes == 0 && result.Deletions == 0
+                ? "受信なし"
+                : $"受信 本 {result.Items:N0} 件 / 本棚 {result.Shelves} / ボリューム {result.Volumes}";
+
+            string upText = upload.Uploaded == 0 ? "送信なし" : $"送信 {upload.Uploaded:N0} 件";
+            string problems = upload.Conflicted > 0 || upload.Failed > 0
+                ? $" (競合 {upload.Conflicted} / 失敗 {upload.Failed})"
+                : string.Empty;
+
+            StatusMessage = $"iCloud同期完了: {upText}, {downText}{problems}";
         }
         catch (CloudKitException ex) when (ex.IsAuthenticationRequired)
         {
@@ -729,6 +743,16 @@ public class MainViewModel : INotifyPropertyChanged
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Queues every row for upload and syncs. For repairing a library that iCloud has
+    /// fallen behind on.
+    /// </summary>
+    public async Task ResendEverythingToCloudAsync(CancellationToken cancellationToken = default)
+    {
+        await _repository.MarkAllPendingUploadAsync(cancellationToken);
+        await SyncWithCloudKitAsync(cancellationToken);
     }
 
     private bool _isSyncingThumbnails;
@@ -876,20 +900,20 @@ public class MainViewModel : INotifyPropertyChanged
             int importedBooks = 0;
             foreach (var item in result.ImportedBooks)
             {
-                await _repository.UpsertItemAsync(item, cancellationToken);
+                await _repository.UpsertItemAsync(item, cancellationToken: cancellationToken);
                 importedBooks++;
             }
 
             int importedShelves = 0;
             foreach (var shelf in result.ImportedShelves)
             {
-                await _repository.UpsertShelfAsync(shelf, cancellationToken);
+                await _repository.UpsertShelfAsync(shelf, cancellationToken: cancellationToken);
                 importedShelves++;
             }
 
             foreach (var vol in result.DiscoveredVolumes)
             {
-                await _repository.UpsertVolumeAsync(vol, cancellationToken);
+                await _repository.UpsertVolumeAsync(vol, cancellationToken: cancellationToken);
             }
 
             await RefreshBooksAsync();

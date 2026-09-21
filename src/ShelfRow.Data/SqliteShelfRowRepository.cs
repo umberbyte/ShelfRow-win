@@ -64,7 +64,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 LastKnownPath TEXT,
                 WindowsMountPath TEXT,
                 CloudKitRecordName TEXT,
-                CloudKitChangeTag TEXT
+                CloudKitChangeTag TEXT,
+                PendingUpload INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS Shelves (
@@ -77,7 +78,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 SortKey TEXT NOT NULL,
                 SmartConditionsJson TEXT,
                 CloudKitRecordName TEXT,
-                CloudKitChangeTag TEXT
+                CloudKitChangeTag TEXT,
+                PendingUpload INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS Items (
@@ -106,6 +108,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 VolumeRecordName TEXT,
                 CloudKitRecordName TEXT,
                 CloudKitChangeTag TEXT,
+                PendingUpload INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (VolumeId) REFERENCES Volumes(Id) ON DELETE SET NULL
             );
 
@@ -146,19 +149,22 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     private static async Task AddMissingColumnsAsync(SqliteConnection conn, CancellationToken cancellationToken)
     {
-        (string Table, string Column)[] required =
+        (string Table, string Column, string Type)[] required =
         [
-            ("Volumes", "CloudKitRecordName"),
-            ("Volumes", "CloudKitChangeTag"),
-            ("Shelves", "CloudKitRecordName"),
-            ("Shelves", "CloudKitChangeTag"),
-            ("Items", "VolumeRecordName"),
-            ("Items", "CloudKitRecordName"),
-            ("Items", "CloudKitChangeTag"),
-            ("ItemShelves", "CloudKitRecordName")
+            ("Volumes", "CloudKitRecordName", "TEXT"),
+            ("Volumes", "CloudKitChangeTag", "TEXT"),
+            ("Volumes", "PendingUpload", "INTEGER NOT NULL DEFAULT 0"),
+            ("Shelves", "CloudKitRecordName", "TEXT"),
+            ("Shelves", "CloudKitChangeTag", "TEXT"),
+            ("Shelves", "PendingUpload", "INTEGER NOT NULL DEFAULT 0"),
+            ("Items", "VolumeRecordName", "TEXT"),
+            ("Items", "CloudKitRecordName", "TEXT"),
+            ("Items", "CloudKitChangeTag", "TEXT"),
+            ("Items", "PendingUpload", "INTEGER NOT NULL DEFAULT 0"),
+            ("ItemShelves", "CloudKitRecordName", "TEXT")
         ];
 
-        foreach (var (table, column) in required)
+        foreach (var (table, column, type) in required)
         {
             using var check = conn.CreateCommand();
             check.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = @Column";
@@ -168,7 +174,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 continue;
 
             using var alter = conn.CreateCommand();
-            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} TEXT";
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type}";
             await alter.ExecuteNonQueryAsync(cancellationToken);
         }
     }
@@ -289,12 +295,12 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         return Convert.ToInt32(scalar);
     }
 
-    public async Task UpsertItemAsync(Item item, CancellationToken cancellationToken = default)
+    public async Task UpsertItemAsync(Item item, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
-        await UpsertItemsBatchAsync(new[] { item }, cancellationToken);
+        await UpsertItemsBatchAsync(new[] { item }, markPendingUpload, cancellationToken);
     }
 
-    public async Task UpsertItemsBatchAsync(IEnumerable<Item> items, CancellationToken cancellationToken = default)
+    public async Task UpsertItemsBatchAsync(IEnumerable<Item> items, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
@@ -306,12 +312,12 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 Id, LegacyId, VolumeId, RelativePath, Title, Author, Rating, IsUnread,
                 Genre, Relation, KeywordA, KeywordB, Memo, CoverImageName, CoverImagePath,
                 AddedDate, LastReadDate, Pages, BookType, FileType, CoverVersion, CoverBytes,
-                VolumeRecordName, CloudKitRecordName, CloudKitChangeTag
+                VolumeRecordName, CloudKitRecordName, CloudKitChangeTag, PendingUpload
             ) VALUES (
                 @Id, @LegacyId, @VolumeId, @RelativePath, @Title, @Author, @Rating, @IsUnread,
                 @Genre, @Relation, @KeywordA, @KeywordB, @Memo, @CoverImageName, @CoverImagePath,
                 @AddedDate, @LastReadDate, @Pages, @BookType, @FileType, @CoverVersion, @CoverBytes,
-                @VolumeRecordName, @CloudKitRecordName, @CloudKitChangeTag
+                @VolumeRecordName, @CloudKitRecordName, @CloudKitChangeTag, @PendingUpload
             )
             ON CONFLICT(Id) DO UPDATE SET
                 LegacyId = excluded.LegacyId,
@@ -337,7 +343,10 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 CoverBytes = excluded.CoverBytes,
                 VolumeRecordName = excluded.VolumeRecordName,
                 CloudKitRecordName = excluded.CloudKitRecordName,
-                CloudKitChangeTag = excluded.CloudKitChangeTag;
+                CloudKitChangeTag = excluded.CloudKitChangeTag,
+                -- A row already waiting to upload stays waiting: an incoming copy from
+                -- sync must not silently discard an edit made here that never went up.
+                PendingUpload = MAX(Items.PendingUpload, excluded.PendingUpload);
         ";
 
         var pId = cmdItem.Parameters.Add("@Id", SqliteType.Text);
@@ -365,6 +374,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var pVrn = cmdItem.Parameters.Add("@VolumeRecordName", SqliteType.Text);
         var pCkr = cmdItem.Parameters.Add("@CloudKitRecordName", SqliteType.Text);
         var pCkt = cmdItem.Parameters.Add("@CloudKitChangeTag", SqliteType.Text);
+        cmdItem.Parameters.AddWithValue("@PendingUpload", markPendingUpload ? 1 : 0);
 
         using var cmdDeleteShelves = conn.CreateCommand();
         cmdDeleteShelves.Transaction = tx;
@@ -459,15 +469,15 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         return list;
     }
 
-    public async Task UpsertShelfAsync(Shelf shelf, CancellationToken cancellationToken = default)
+    public async Task UpsertShelfAsync(Shelf shelf, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             INSERT INTO Shelves (Id, Title, Icon, Type, SortOrder, SortAscending, SortKey, SmartConditionsJson,
-                CloudKitRecordName, CloudKitChangeTag)
+                CloudKitRecordName, CloudKitChangeTag, PendingUpload)
             VALUES (@Id, @Title, @Icon, @Type, @SortOrder, @SortAscending, @SortKey, @SmartConditionsJson,
-                @CloudKitRecordName, @CloudKitChangeTag)
+                @CloudKitRecordName, @CloudKitChangeTag, @PendingUpload)
             ON CONFLICT(Id) DO UPDATE SET
                 Title = excluded.Title,
                 Icon = excluded.Icon,
@@ -477,7 +487,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 SortKey = excluded.SortKey,
                 SmartConditionsJson = excluded.SmartConditionsJson,
                 CloudKitRecordName = excluded.CloudKitRecordName,
-                CloudKitChangeTag = excluded.CloudKitChangeTag;
+                CloudKitChangeTag = excluded.CloudKitChangeTag,
+                PendingUpload = MAX(Shelves.PendingUpload, excluded.PendingUpload);
         ";
         cmd.Parameters.AddWithValue("@Id", shelf.Id.ToString("D"));
         cmd.Parameters.AddWithValue("@Title", shelf.Title);
@@ -489,6 +500,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         cmd.Parameters.AddWithValue("@SmartConditionsJson", (object?)shelf.SmartConditionsJson ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CloudKitRecordName", (object?)shelf.CloudKitRecordName ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CloudKitChangeTag", (object?)shelf.CloudKitChangeTag ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@PendingUpload", markPendingUpload ? 1 : 0);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -544,13 +556,13 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         return null;
     }
 
-    public async Task UpsertVolumeAsync(Volume volume, CancellationToken cancellationToken = default)
+    public async Task UpsertVolumeAsync(Volume volume, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT INTO Volumes (Id, Name, LastKnownPath, WindowsMountPath, CloudKitRecordName, CloudKitChangeTag)
-            VALUES (@Id, @Name, @LastKnownPath, @WindowsMountPath, @CloudKitRecordName, @CloudKitChangeTag)
+            INSERT INTO Volumes (Id, Name, LastKnownPath, WindowsMountPath, CloudKitRecordName, CloudKitChangeTag, PendingUpload)
+            VALUES (@Id, @Name, @LastKnownPath, @WindowsMountPath, @CloudKitRecordName, @CloudKitChangeTag, @PendingUpload)
             ON CONFLICT(Id) DO UPDATE SET
                 Name = excluded.Name,
                 LastKnownPath = excluded.LastKnownPath,
@@ -558,8 +570,10 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 -- iCloud, so a record arriving from sync must not erase it.
                 WindowsMountPath = COALESCE(excluded.WindowsMountPath, Volumes.WindowsMountPath),
                 CloudKitRecordName = excluded.CloudKitRecordName,
-                CloudKitChangeTag = excluded.CloudKitChangeTag;
+                CloudKitChangeTag = excluded.CloudKitChangeTag,
+                PendingUpload = MAX(Volumes.PendingUpload, excluded.PendingUpload);
         ";
+        cmd.Parameters.AddWithValue("@PendingUpload", markPendingUpload ? 1 : 0);
         cmd.Parameters.AddWithValue("@Id", volume.Id.ToString("D"));
         cmd.Parameters.AddWithValue("@Name", volume.Name);
         cmd.Parameters.AddWithValue("@LastKnownPath", volume.LastKnownPath);
@@ -640,6 +654,30 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
         };
     }
+
+    private static Shelf MapShelf(DbDataReader reader) => new()
+    {
+        Id = Guid.Parse(reader.GetString(reader.GetOrdinal("Id"))),
+        Title = reader.GetString(reader.GetOrdinal("Title")),
+        Icon = reader.GetInt32(reader.GetOrdinal("Icon")),
+        Type = reader.GetInt32(reader.GetOrdinal("Type")),
+        SortOrder = reader.GetInt32(reader.GetOrdinal("SortOrder")),
+        SortAscending = reader.GetInt32(reader.GetOrdinal("SortAscending")) == 1,
+        SortKey = reader.GetString(reader.GetOrdinal("SortKey")),
+        SmartConditionsJson = reader.IsDBNull(reader.GetOrdinal("SmartConditionsJson")) ? null : reader.GetString(reader.GetOrdinal("SmartConditionsJson")),
+        CloudKitRecordName = reader.IsDBNull(reader.GetOrdinal("CloudKitRecordName")) ? null : reader.GetString(reader.GetOrdinal("CloudKitRecordName")),
+        CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
+    };
+
+    private static Volume MapVolume(DbDataReader reader) => new()
+    {
+        Id = Guid.Parse(reader.GetString(reader.GetOrdinal("Id"))),
+        Name = reader.GetString(reader.GetOrdinal("Name")),
+        LastKnownPath = reader.IsDBNull(reader.GetOrdinal("LastKnownPath")) ? string.Empty : reader.GetString(reader.GetOrdinal("LastKnownPath")),
+        WindowsMountPath = reader.IsDBNull(reader.GetOrdinal("WindowsMountPath")) ? null : reader.GetString(reader.GetOrdinal("WindowsMountPath")),
+        CloudKitRecordName = reader.IsDBNull(reader.GetOrdinal("CloudKitRecordName")) ? null : reader.GetString(reader.GetOrdinal("CloudKitRecordName")),
+        CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
+    };
 
     /// <summary>
     /// Turns a smart shelf's conditions into a SQL predicate. Evaluating them in memory
@@ -768,6 +806,83 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
               AND EXISTS (SELECT 1 FROM Volumes v WHERE v.CloudKitRecordName = Items.VolumeRecordName);
         ";
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Rows edited here that iCloud has not taken yet.
+    /// </summary>
+    public async Task<PendingUploads> GetPendingUploadsAsync(int limit = 200, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+
+        var items = new List<Item>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT * FROM Items WHERE PendingUpload = 1 LIMIT @Limit";
+            cmd.Parameters.AddWithValue("@Limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                items.Add(MapItem(reader));
+        }
+
+        var shelves = new List<Shelf>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT * FROM Shelves WHERE PendingUpload = 1 LIMIT @Limit";
+            cmd.Parameters.AddWithValue("@Limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                shelves.Add(MapShelf(reader));
+        }
+
+        var volumes = new List<Volume>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT * FROM Volumes WHERE PendingUpload = 1 LIMIT @Limit";
+            cmd.Parameters.AddWithValue("@Limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                volumes.Add(MapVolume(reader));
+        }
+
+        return new PendingUploads(items, shelves, volumes);
+    }
+
+    /// <summary>
+    /// Marks a row as taken by iCloud and stores the record name and version the server
+    /// answered with, which the next write of that row has to quote.
+    /// </summary>
+    public async Task ConfirmUploadedAsync(string table, Guid id, string recordName, string? changeTag, CancellationToken cancellationToken = default)
+    {
+        if (table is not ("Items" or "Shelves" or "Volumes"))
+            throw new ArgumentException($"Unknown table '{table}'.", nameof(table));
+
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            UPDATE {table}
+            SET PendingUpload = 0,
+                CloudKitRecordName = @RecordName,
+                CloudKitChangeTag = @ChangeTag
+            WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@RecordName", recordName);
+        cmd.Parameters.AddWithValue("@ChangeTag", (object?)changeTag ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Id", id.ToString("D"));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Queues every row for upload, for the "resend everything" repair in Preferences.
+    /// </summary>
+    public async Task MarkAllPendingUploadAsync(CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        foreach (string table in new[] { "Items", "Shelves", "Volumes" })
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"UPDATE {table} SET PendingUpload = 1";
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     /// <summary>

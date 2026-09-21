@@ -417,7 +417,7 @@ public sealed partial class PreferencesWindow : Window
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            await _mainViewModel.SyncWithCloudKitAsync();
+            await _mainViewModel.ResendEverythingToCloudAsync();
         }
     }
 
