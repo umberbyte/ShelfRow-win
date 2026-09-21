@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ShelfRow.App.Views.CloudKitSignInWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    Title="Apple ID でサインイン">
+
+    <Grid RowDefinitions="Auto,*,Auto" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+        <StackPanel Grid.Row="0" Padding="16,12" Spacing="4"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <TextBlock Text="iCloud に接続" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="「このブラウザを信頼しますか?」で「信頼する」を、サインイン画面では「サインインしたままにする」を選んでください。選ばない場合、30分で再サインインが必要になります。"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <controls:WebView2 x:Name="AuthWebView" Grid.Row="1" />
+
+        <Grid Grid.Row="2" Padding="16,12" ColumnDefinitions="*,Auto"
+              Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <TextBlock x:Name="StatusText" Grid.Column="0" VerticalAlignment="Center"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Button Grid.Column="1" Content="キャンセル" Click="Cancel_Click" />
+        </Grid>
+    </Grid>
+</Window>

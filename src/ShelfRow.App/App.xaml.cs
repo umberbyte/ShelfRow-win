@@ -45,6 +45,7 @@ public partial class App : Application
     public static Window? MainWindowInstance { get; private set; }
     public static MainViewModel? MainViewModel { get; private set; }
     public static ThumbnailImageLoader? ImageLoader { get; private set; }
+    public static CloudKitAccount? CloudKitAccount { get; private set; }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -67,9 +68,6 @@ public partial class App : Application
 
             Log("Repository and storage created");
 
-            var cloudKitClient = new CloudKitClient(new CloudKitConfiguration());
-            var syncEngine = new CloudKitSyncEngine(cloudKitClient, repository);
-
             Log("Creating MainWindow");
             var mainWindow = new MainWindow();
             MainWindowInstance = mainWindow;
@@ -80,9 +78,20 @@ public partial class App : Application
             Log("Getting DispatcherQueue");
             var dispatcherQueue = mainWindow.DispatcherQueue;
 
+            var settingsService = new AppSettingsService();
+            var cloudKitClient = new CloudKitClient(new CloudKitConfiguration
+            {
+                Environment = settingsService.Current.CloudKitEnvironment
+            });
+            var syncEngine = new CloudKitSyncEngine(cloudKitClient, repository);
+            CloudKitAccount = new CloudKitAccount(
+                cloudKitClient,
+                new CredentialLockerStorageService(),
+                new WebView2CloudKitWebAuth(dispatcherQueue));
+
             Log("Creating ViewModels");
             ImageLoader = new ThumbnailImageLoader(thumbnailStorage, dispatcherQueue);
-            MainViewModel = new MainViewModel(repository, thumbnailStorage, syncEngine, ImageLoader, dispatcherQueue);
+            MainViewModel = new MainViewModel(repository, thumbnailStorage, syncEngine, CloudKitAccount, ImageLoader, dispatcherQueue);
 
             mainWindow.ViewModel = MainViewModel;
 

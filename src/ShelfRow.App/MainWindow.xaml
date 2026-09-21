@@ -5,221 +5,585 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:ShelfRow.App.ViewModels"
+    xmlns:core="using:ShelfRow.Core.Models"
     mc:Ignorable="d"
     Title="ShelfRow">
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Command Bar / Top Toolbar -->
-        <Grid Grid.Row="0" Padding="16,10,16,10" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+        <!-- Main 3-Pane Body -->
+        <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
+                <!-- Left Pane: Sidebar -->
+                <ColumnDefinition Width="260" MinWidth="220" MaxWidth="360" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
+                <!-- Center Pane: Main Content -->
+                <ColumnDefinition Width="*" MinWidth="540" />
                 <ColumnDefinition Width="Auto" />
+                <!-- Right Pane: Inspector / Detail -->
+                <ColumnDefinition Width="320" MinWidth="280" MaxWidth="440" />
             </Grid.ColumnDefinitions>
 
-            <!-- App Title & Icon -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE82D;" FontSize="18" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <TextBlock Text="ShelfRow" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-            </StackPanel>
+            <!-- =================================================================== -->
+            <!-- 1. LEFT PANE: SIDEBAR                                              -->
+            <!-- =================================================================== -->
+            <Grid Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <!-- Search Bar -->
-            <AutoSuggestBox Grid.Column="1"
-                            Margin="32,0,32,0"
-                            MaxWidth="480"
-                            HorizontalAlignment="Stretch"
-                            PlaceholderText="タイトル・著者名で検索..."
-                            QueryIcon="Find"
-                            Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
-
-            <!-- Action Buttons -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button Click="ImportXmlButton_Click"
-                        IsEnabled="{x:Bind ViewModel.CanImport, Mode=OneWay}"
-                        ToolTipService.ToolTip="Stackroom Library.xml からインポート">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE8B5;" FontSize="14" />
-                        <TextBlock Text="XMLインポート" />
-                    </StackPanel>
-                </Button>
-                <Button Command="{x:Bind ViewModel.SyncCommand, Mode=OneWay}" ToolTipService.ToolTip="CloudKitと同期">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE895;" FontSize="14" />
-                        <TextBlock Text="同期" />
-                    </StackPanel>
-                </Button>
-                <Button Click="SettingsButton_Click" ToolTipService.ToolTip="NAS ボリューム設定">
-                    <FontIcon Glyph="&#xE713;" FontSize="14" />
-                </Button>
-            </StackPanel>
-        </Grid>
-
-        <!-- Main Body: Navigation Sidebar + Book Grid -->
-        <NavigationView Grid.Row="1"
-                        x:Name="NavView"
-                        IsBackButtonVisible="Collapsed"
-                        IsSettingsVisible="True"
-                        PaneDisplayMode="Left"
-                        OpenPaneLength="220"
-                        ItemInvoked="NavView_ItemInvoked"
-                        SelectionChanged="NavView_SelectionChanged">
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="すべての書籍" Tag="all_books">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8F1;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="本棚" />
-            </NavigationView.MenuItems>
-
-            <!-- Grid of Books (Virtualized) -->
-            <Grid Padding="20,16,20,16">
-                <!-- Loading Ring -->
-                <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
-                              Width="48"
-                              Height="48"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              Canvas.ZIndex="10" />
-
-                <!-- Empty State Message -->
-                <StackPanel HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="12"
-                            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
-                    <FontIcon Glyph="&#xE736;" FontSize="48" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="表示する書籍がありません"
-                               FontSize="16"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               HorizontalAlignment="Center" />
+                <!-- App Header -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Padding="18,16,18,12" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE82D;" FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                    <TextBlock Text="ShelfRow" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <!-- Book Grid with UI Virtualization -->
-                <GridView ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
-                          SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
-                          SelectionMode="Single"
-                          IsItemClickEnabled="True"
-                          ItemClick="GridView_ItemClick">
-                    <GridView.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170" ItemHeight="260" />
-                        </ItemsPanelTemplate>
-                    </GridView.ItemsPanel>
+                <!-- Sidebar Navigation List -->
+                <ScrollViewer Grid.Row="1" Padding="8,0,8,8">
+                    <StackPanel Spacing="16">
+                        <!-- Section: Library -->
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="ライブラリ" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="12,4,12,4" />
+                            
+                            <Button x:Name="BtnAllBooks" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="10,8" Click="AllBooks_Click" Background="Transparent" BorderThickness="0" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE8A5;" FontSize="14" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="すべての項目" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.TotalBooksCountText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
 
-                    <GridView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ItemViewModel">
-                            <Grid Padding="6" CornerRadius="8">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="200" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <Button x:Name="BtnUnreadBooks" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="10,8" Click="UnreadBooks_Click" Background="Transparent" BorderThickness="0" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xEA3B;" FontSize="12" Foreground="#22C55E" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="未読" FontSize="13" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
 
-                                <!-- Cover Image Container -->
-                                <Border Grid.Row="0"
-                                        CornerRadius="6"
-                                        Background="{ThemeResource LayerFillColorAltBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1">
-                                    <Grid>
-                                        <!-- Placeholder when thumbnail is loading/absent -->
-                                        <FontIcon Glyph="&#xE82D;"
-                                                  FontSize="36"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                  HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center" />
+                        <!-- Section: Favorites (Static Shelves) -->
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="お気に入り" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="12,4,12,4" />
+                            
+                            <ListView ItemsSource="{x:Bind ViewModel.StaticShelves, Mode=OneWay}" SelectionMode="Single" SelectionChanged="Shelf_SelectionChanged" Padding="0">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="core:Shelf">
+                                        <Grid Padding="4,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Grid.Column="0" Glyph="&#xE8F1;" FontSize="14" Margin="0,0,8,0" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Title}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Grid.ContextFlyout>
+                                                <MenuFlyout>
+                                                    <MenuFlyoutItem Text="削除" Click="DeleteShelf_Click" Tag="{x:Bind}" />
+                                                </MenuFlyout>
+                                            </Grid.ContextFlyout>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
 
-                                        <!-- Actual Thumbnail Image -->
-                                        <Image Source="{x:Bind ThumbnailImage, Mode=OneWay}"
-                                               Stretch="UniformToFill" />
+                        <!-- Section: Smart Shelves -->
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="スマートシェルフ" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="12,4,12,4" />
+                            
+                            <ListView ItemsSource="{x:Bind ViewModel.SmartShelves, Mode=OneWay}" SelectionMode="Single" SelectionChanged="Shelf_SelectionChanged" Padding="0">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="core:Shelf">
+                                        <Grid Padding="4,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Grid.Column="0" Glyph="&#xE734;" FontSize="14" Margin="0,0,8,0" Foreground="#EAB308" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Title}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Grid.ContextFlyout>
+                                                <MenuFlyout>
+                                                    <MenuFlyoutItem Text="削除" Click="DeleteShelf_Click" Tag="{x:Bind}" />
+                                                </MenuFlyout>
+                                            </Grid.ContextFlyout>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
 
-                                        <!-- Unread Badge -->
-                                        <Border HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"
-                                                Margin="6"
-                                                Padding="6,2"
-                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                CornerRadius="4"
-                                                Visibility="{x:Bind IsUnread, Mode=OneWay}">
-                                            <TextBlock Text="未読" FontSize="10" FontWeight="SemiBold" Foreground="White" />
-                                        </Border>
-                                    </Grid>
-                                </Border>
+                <!-- Sidebar Footer Controls -->
+                <Grid Grid.Row="2" Padding="12,8" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button ToolTipService.ToolTip="シェルフを追加">
+                            <FontIcon Glyph="&#xE710;" FontSize="13" />
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="新規標準シェルフ..." Click="NewStandardShelf_Click" />
+                                    <MenuFlyoutItem Text="新規スマートシェルフ..." Click="NewSmartShelf_Click" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
 
-                                <!-- Title -->
-                                <TextBlock Grid.Row="1"
-                                           Text="{x:Bind Title, Mode=OneWay}"
-                                           FontSize="13"
-                                           FontWeight="Medium"
-                                           MaxLines="2"
-                                           TextTrimming="CharacterEllipsis"
-                                           Margin="2,6,2,0" />
-
-                                <!-- Author -->
-                                <TextBlock Grid.Row="2"
-                                           Text="{x:Bind Author, Mode=OneWay}"
-                                           FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Margin="2,2,2,0" />
-                            </Grid>
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
-                </GridView>
+                        <Button Click="SettingsButton_Click" ToolTipService.ToolTip="環境設定">
+                            <FontIcon Glyph="&#xE713;" FontSize="13" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Grid>
-        </NavigationView>
+
+            <!-- Splitter 1 -->
+            <Border Grid.Column="1" Width="1" Background="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+            <!-- =================================================================== -->
+            <!-- 2. CENTER PANE: MAIN CONTENT                                       -->
+            <!-- =================================================================== -->
+            <Grid Grid.Column="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Top Header & Filter Controls -->
+                <StackPanel Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+                    <!-- Row 1: Collection Title, Mode Switcher, Sort, Search -->
+                    <Grid Padding="20,14,20,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Collection Title & Items Count -->
+                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind ViewModel.CurrentCollectionTitle, Mode=OneWay}" FontSize="20" FontWeight="Bold" />
+                            <TextBlock Text="{x:Bind ViewModel.ItemsCountText, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <!-- Center / Right: View Mode, Sort, Search -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <!-- View Mode Switcher (List / Grid) -->
+                            <StackPanel Orientation="Horizontal" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="2">
+                                <Button Content="リスト" Click="ViewModeList_Click"
+                                        Background="{x:Bind ViewModel.ListViewModeBackground, Mode=OneWay}"
+                                        Padding="10,4" BorderThickness="0" CornerRadius="4" FontSize="12" />
+                                <Button Content="グリッド" Click="ViewModeGrid_Click"
+                                        Background="{x:Bind ViewModel.GridViewModeBackground, Mode=OneWay}"
+                                        Padding="10,4" BorderThickness="0" CornerRadius="4" FontSize="12" />
+                            </StackPanel>
+
+                            <!-- Sort Menu -->
+                            <Button Padding="10,5">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="{x:Bind ViewModel.SortDirectionGlyph, Mode=OneWay}" FontSize="11" />
+                                    <TextBlock Text="{x:Bind ViewModel.SortKeyLabel, Mode=OneWay}" FontSize="12" />
+                                    <FontIcon Glyph="&#xE70D;" FontSize="10" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="タイトルで並び替え" Click="SortByTitle_Click" />
+                                        <MenuFlyoutItem Text="レートで並び替え" Click="SortByRating_Click" />
+                                        <MenuFlyoutItem Text="作者で並び替え" Click="SortByAuthor_Click" />
+                                        <MenuFlyoutItem Text="登録日で並び替え" Click="SortByAddedDate_Click" />
+                                        <MenuFlyoutItem Text="ページ数で並び替え" Click="SortByPages_Click" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="昇順 / 降順を切り替え" Click="ToggleSortDirection_Click" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+
+                            <!-- Search Box -->
+                            <AutoSuggestBox Width="240"
+                                            PlaceholderText="検索..."
+                                            QueryIcon="Find"
+                                            Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Row 2: Live Filters (Unread, Type, Rating, Clear) -->
+                    <StackPanel Spacing="8" Padding="20,0,20,12">
+                        <!-- Line 1: Unread & Book Types -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <!-- Unread Filter -->
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsUnreadOnlyFilter, Mode=TwoWay}" Padding="8,4" CornerRadius="6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse Width="8" Height="8" Fill="#22C55E" />
+                                    <TextBlock Text="未読" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </ToggleButton>
+
+                            <Border Width="1" Height="18" Background="{ThemeResource CardStrokeColorDefaultBrush}" Margin="4,0" />
+
+                            <TextBlock Text="種別:" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0" />
+
+                            <Button Content="すべて" Click="FilterTypeAll_Click" Padding="8,3" FontSize="12" CornerRadius="4" />
+                            <Button Click="FilterType0_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EAB308" />
+                                    <TextBlock Text="厚い本" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="FilterType1_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#3B82F6" />
+                                    <TextBlock Text="薄い本" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="FilterType2_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#22C55E" />
+                                    <TextBlock Text="本の一部" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="FilterType3_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EC4899" />
+                                    <TextBlock Text="画像セット" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="FilterType4_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE8A5;" FontSize="12" Foreground="#9CA3AF" />
+                                    <TextBlock Text="テキスト" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="FilterType5_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE8B2;" FontSize="12" Foreground="#A855F7" />
+                                    <TextBlock Text="ムービー" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Line 2: Rating Stars & Clear -->
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <TextBlock Text="評価:" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                <Button Content="★1" Click="FilterRating1_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <Button Content="★2" Click="FilterRating2_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <Button Content="★3" Click="FilterRating3_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <Button Content="★4" Click="FilterRating4_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <Button Content="★5" Click="FilterRating5_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                            </StackPanel>
+
+                            <Button Content="フィルタをクリア" Click="ClearFilters_Click" HorizontalAlignment="Right" Padding="10,3" FontSize="11" />
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Content Area: List View or Grid View -->
+                <Grid Grid.Row="1">
+                    <!-- Loading Indicator -->
+                    <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                                  Width="48" Height="48"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Canvas.ZIndex="10" />
+
+                    <!-- Empty State -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
+                                Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="該当する本がありません" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- GRID VIEW MODE (Matching mac GridItemCardView) -->
+                    <ScrollViewer Visibility="{x:Bind ViewModel.IsGridView, Mode=OneWay}" Padding="20,16">
+                        <GridView ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
+                                  SelectionMode="Single"
+                                  IsItemClickEnabled="True">
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid Orientation="Horizontal" ItemWidth="130" ItemHeight="195" />
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+
+                            <GridView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ItemViewModel">
+                                    <StackPanel Spacing="6" HorizontalAlignment="Center" Width="110" Padding="0,4">
+                                        <!-- Cover Image (110x145, 4px CornerRadius) -->
+                                        <Border Width="110" Height="145" CornerRadius="4"
+                                                Background="{ThemeResource LayerFillColorAltBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                            <Grid>
+                                                <FontIcon Glyph="&#xE82D;" FontSize="28" Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <Image Source="{x:Bind ThumbnailImage, Mode=OneWay}" Stretch="UniformToFill" />
+                                                
+                                                <!-- Unread Indicator (Top Right Dot) -->
+                                                <Ellipse Width="10" Height="10" Fill="#22C55E"
+                                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                         Margin="6" Visibility="{x:Bind UnreadVisibility, Mode=OneWay}" />
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- 2-Line Centered Title -->
+                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                   FontSize="11"
+                                                   TextAlignment="Center"
+                                                   MaxLines="2"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Height="28"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </ScrollViewer>
+
+                    <!-- LIST VIEW MODE (Matching mac classicListRow) -->
+                    <ListView Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}"
+                              ItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
+                              SelectionMode="Single"
+                              Padding="12,8">
+                        <ListView.Header>
+                            <Grid Padding="12,6" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" MinWidth="180" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="90" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="" />
+                                <TextBlock Grid.Column="1" Text="種別" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="2" Text="タイトル" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="レート" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="4" Text="作者" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="5" Text="ジャンル" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="6" Text="登録日" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                        </ListView.Header>
+
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ItemViewModel">
+                                <Grid Padding="6,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24" />
+                                        <ColumnDefinition Width="32" />
+                                        <ColumnDefinition Width="*" MinWidth="180" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Unread Circle -->
+                                    <Ellipse Grid.Column="0" Width="8" Height="8" Stroke="#22C55E" StrokeThickness="1.5"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                                             Visibility="{x:Bind UnreadVisibility, Mode=OneWay}" />
+
+                                    <!-- Book Type Icon -->
+                                    <FontIcon Grid.Column="1" Glyph="{x:Bind BookTypeGlyph, Mode=OneWay}"
+                                              Foreground="{x:Bind BookTypeBrush, Mode=OneWay}"
+                                              FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                    <!-- Title -->
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Title, Mode=OneWay}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                    <!-- Rating Stars -->
+                                    <TextBlock Grid.Column="3" Text="{x:Bind RatingStarsText, Mode=OneWay}" FontSize="11" Foreground="#EAB308" VerticalAlignment="Center" />
+
+                                    <!-- Author -->
+                                    <TextBlock Grid.Column="4" Text="{x:Bind Author, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                    <!-- Genre -->
+                                    <TextBlock Grid.Column="5" Text="{x:Bind Genre, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                    <!-- Added Date -->
+                                    <TextBlock Grid.Column="6" Text="{x:Bind AddedDateText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Grid>
+
+            <!-- Splitter 2 -->
+            <Border Grid.Column="3" Width="1" Background="{ThemeResource CardStrokeColorDefaultBrush}" />
+
+            <!-- =================================================================== -->
+            <!-- 3. RIGHT PANE: INSPECTOR / DETAIL (Matching mac classicInspectorView) -->
+            <!-- =================================================================== -->
+            <Grid Grid.Column="4" Background="{ThemeResource LayerFillColorAltBrush}">
+                <!-- Empty selection state -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
+                            Visibility="{x:Bind ViewModel.NoSelectedItem, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE8EC;" FontSize="32" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock Text="本棚から本を選択してください。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <!-- Selected item inspector view -->
+                <ScrollViewer Visibility="{x:Bind ViewModel.HasSelectedItem, Mode=OneWay}" Padding="16,20,16,24">
+                    <StackPanel Spacing="14">
+                        <!-- Big Cover Image (176x224, 10px CornerRadius, Shadow) -->
+                        <Border Width="176" Height="224" CornerRadius="10"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                                HorizontalAlignment="Center">
+                            <Grid>
+                                <FontIcon Glyph="&#xE82D;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image Source="{x:Bind ViewModel.SelectedItem.ThumbnailImage, Mode=OneWay}" Stretch="UniformToFill" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Item Title (18pt bold, max 2 lines) -->
+                        <TextBlock Text="{x:Bind ViewModel.SelectedItem.Title, Mode=OneWay}"
+                                   FontSize="17" FontWeight="Bold" MaxLines="2" TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" TextAlignment="Center" />
+
+                        <!-- Unread Checkbox -->
+                        <CheckBox Content="未読にする"
+                                  IsChecked="{x:Bind ViewModel.SelectedItem.IsUnread, Mode=TwoWay}"
+                                  HorizontalAlignment="Center" />
+
+                        <MenuFlyoutSeparator />
+
+                        <!-- Metadata Fields (Right-aligned 78px label + Edit Box) -->
+                        <StackPanel Spacing="8">
+                            <!-- Title -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="タイトル:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Title, Mode=TwoWay}" FontSize="12" />
+                            </Grid>
+
+                            <!-- Author -->
+                            <StackPanel Spacing="3">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="作者:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Author, Mode=TwoWay}" FontSize="12" />
+                                </Grid>
+                                <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchAuthorKeyword_Click"
+                                        Content="この作者を検索" Visibility="{x:Bind ViewModel.SelectedItem.AuthorVisibility, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <!-- Rating -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="レート:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                <RatingControl Grid.Column="1" Value="{x:Bind ViewModel.SelectedItem.Rating, Mode=TwoWay}" MaxRating="5" HorizontalAlignment="Left" />
+                            </Grid>
+
+                            <!-- Keyword A -->
+                            <StackPanel Spacing="3">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="キーワードA:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordA, Mode=TwoWay}" FontSize="12" />
+                                </Grid>
+                                <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordA_Click"
+                                        Content="このキーワードAを検索" Visibility="{x:Bind ViewModel.SelectedItem.KeywordAVisibility, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <!-- Keyword B -->
+                            <StackPanel Spacing="3">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="キーワードB:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordB, Mode=TwoWay}" FontSize="12" />
+                                </Grid>
+                                <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordB_Click"
+                                        Content="このキーワードBを検索" Visibility="{x:Bind ViewModel.SelectedItem.KeywordBVisibility, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <!-- Memo -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="メモ:" FontSize="12" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,6,0,0" />
+                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Memo, Mode=TwoWay}" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="70" />
+                            </Grid>
+
+                            <!-- Genre -->
+                            <StackPanel Spacing="3">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="ジャンル:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Genre, Mode=TwoWay}" FontSize="12" />
+                                </Grid>
+                                <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchGenreKeyword_Click"
+                                        Content="このジャンルを検索" Visibility="{x:Bind ViewModel.SelectedItem.GenreVisibility, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <!-- Relation -->
+                            <StackPanel Spacing="3">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="関連:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Relation, Mode=TwoWay}" FontSize="12" />
+                                </Grid>
+                                <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchRelationKeyword_Click"
+                                        Content="この関連を検索" Visibility="{x:Bind ViewModel.SelectedItem.RelationVisibility, Mode=OneWay}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <MenuFlyoutSeparator />
+
+                        <!-- Read-only Metadata Footer (Added date, last read, pages) -->
+                        <StackPanel Spacing="3" Margin="8,0">
+                            <TextBlock Text="{x:Bind ViewModel.SelectedItem.AddedDateText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedItem.LastReadDateText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedItem.PagesText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
 
         <!-- Status Bar -->
-        <Grid Grid.Row="2" Padding="16,6,16,6" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+        <Grid Grid.Row="1" Padding="16,6,16,6" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0"
-                       Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                       FontSize="12"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       VerticalAlignment="Center" />
-
-            <TextBlock Grid.Column="1"
-                       Text="{x:Bind ViewModel.TotalBooksCountText, Mode=OneWay}"
-                       FontSize="12"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       VerticalAlignment="Center" />
-        </Grid>
-
-        <!-- Import Progress Modal Overlay -->
-        <Grid Grid.Row="0" Grid.RowSpan="3"
-              Background="#80000000"
-              Canvas.ZIndex="999"
-              Visibility="{x:Bind ViewModel.ImportOverlayVisibility, Mode=OneWay}">
-            <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Padding="28"
-                    Width="380"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <StackPanel Spacing="16">
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <ProgressRing IsActive="{x:Bind ViewModel.IsImporting, Mode=OneWay}" Width="24" Height="24" />
-                        <TextBlock Text="Stackroom XML インポート中" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ProgressBar IsIndeterminate="True" />
-                    <TextBlock Text="{x:Bind ViewModel.ImportProgressText, Mode=OneWay}"
-                               FontSize="13"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.TotalBooksCountText, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
         </Grid>
     </Grid>
 </Window>

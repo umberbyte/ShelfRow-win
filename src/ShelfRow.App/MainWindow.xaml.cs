@@ -4,15 +4,15 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ShelfRow.App.ViewModels;
+using ShelfRow.App.Views;
 using ShelfRow.Core.Models;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace ShelfRow.App;
 
 public sealed partial class MainWindow : Window
 {
     private MainViewModel? _viewModel;
+    private PreferencesWindow? _preferencesWindow;
 
     public MainWindow()
     {
@@ -20,7 +20,7 @@ public sealed partial class MainWindow : Window
         Title = "ShelfRow";
         try
         {
-            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1150, 780));
+            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 800));
         }
         catch { }
     }
@@ -32,26 +32,22 @@ public sealed partial class MainWindow : Window
         {
             if (_viewModel != null)
             {
-                _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                _viewModel.OpenSettingsRequested -= ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification -= ViewModel_ImportCompletedNotification;
             }
 
             _viewModel = value;
             if (_viewModel != null)
             {
-                _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+                _viewModel.OpenSettingsRequested += ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification += ViewModel_ImportCompletedNotification;
-                PopulateShelvesInNav();
             }
         }
     }
 
-    private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void ViewModel_OpenSettingsRequested(object? sender, EventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.Shelves))
-        {
-            DispatcherQueue.TryEnqueue(PopulateShelvesInNav);
-        }
+        OpenPreferencesWindow();
     }
 
     private void ViewModel_ImportCompletedNotification(string message)
@@ -70,117 +66,162 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private async void ImportXmlButton_Click(object sender, RoutedEventArgs e)
+    #region Sidebar Navigation
+
+    private void AllBooks_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel == null || _viewModel.IsImporting) return;
+        _viewModel?.SelectAllBooksCollection();
+    }
 
-        try
+    private void UnreadBooks_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.SelectUnreadCollection();
+    }
+
+    private void Shelf_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListView lv && lv.SelectedItem is Shelf shelf)
         {
-            var picker = new FileOpenPicker();
-            var hwnd = WindowNative.GetWindowHandle(this);
-            InitializeWithWindow.Initialize(picker, hwnd);
-
-            picker.ViewMode = PickerViewMode.List;
-            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-            picker.FileTypeFilter.Add(".xml");
-
-            var file = await picker.PickSingleFileAsync();
-            if (file != null)
+            if (_viewModel != null)
             {
-                await _viewModel.ImportXmlFileAsync(file.Path);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (this.Content?.XamlRoot != null)
-            {
-                var dialog = new ContentDialog
-                {
-                    Title = "ファイル選択エラー",
-                    Content = ex.Message,
-                    CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot
-                };
-                await dialog.ShowAsync();
+                _viewModel.SelectedShelf = shelf;
             }
         }
     }
 
-    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
+    private async void NewStandardShelf_Click(object sender, RoutedEventArgs e)
     {
-        await OpenVolumeSettingsDialogAsync();
-    }
-
-    private async void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
-    {
-        if (args.IsSettingsInvoked)
+        if (_viewModel != null)
         {
-            await OpenVolumeSettingsDialogAsync();
+            await _viewModel.CreateStandardShelfAsync();
         }
     }
 
-    private async Task OpenVolumeSettingsDialogAsync()
+    private async void NewSmartShelf_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel == null || this.Content?.XamlRoot == null) return;
-
-        try
+        if (_viewModel != null)
         {
-            var hwnd = WindowNative.GetWindowHandle(this);
-            var dialog = new ShelfRow.App.Views.VolumeSettingsDialog(_viewModel, hwnd)
-            {
-                XamlRoot = this.Content.XamlRoot
-            };
-            await dialog.ShowAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to open VolumeSettingsDialog: {ex.Message}");
+            await _viewModel.CreateSmartShelfAsync();
         }
     }
 
-    private void PopulateShelvesInNav()
+    private async void DeleteShelf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem item && item.Tag is Shelf shelf && _viewModel != null)
+        {
+            await _viewModel.DeleteShelfAsync(shelf);
+        }
+    }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenPreferencesWindow();
+    }
+
+    private void OpenPreferencesWindow()
     {
         if (_viewModel == null) return;
 
-        // Keep first items (All books + Header)
-        while (NavView.MenuItems.Count > 2)
+        if (_preferencesWindow == null)
         {
-            NavView.MenuItems.RemoveAt(2);
+            _preferencesWindow = new PreferencesWindow(_viewModel);
+            _preferencesWindow.Closed += (s, args) => _preferencesWindow = null;
         }
 
-        foreach (var shelf in _viewModel.Shelves)
-        {
-            var navItem = new NavigationViewItem
-            {
-                Content = shelf.Title,
-                Tag = shelf,
-                Icon = new FontIcon { Glyph = shelf.IsSmart ? "\uE734" : "\uE8F1" }
-            };
-            NavView.MenuItems.Add(navItem);
-        }
+        _preferencesWindow.Activate();
     }
 
-    private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    #endregion
+
+    #region View Mode & Sort Controls
+
+    private void ViewModeList_Click(object sender, RoutedEventArgs e)
     {
-        if (args.SelectedItem is NavigationViewItem item)
+        _viewModel?.SetViewMode(false);
+    }
+
+    private void ViewModeGrid_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.SetViewMode(true);
+    }
+
+    private void SortByTitle_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Title");
+    private void SortByRating_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Rating");
+    private void SortByAuthor_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Author");
+    private void SortByAddedDate_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("AddedDate");
+    private void SortByPages_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Pages");
+
+    private void ToggleSortDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.ToggleSortDirection();
+    }
+
+    #endregion
+
+    #region Live Filters
+
+    private void FilterTypeAll_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(null);
+    private void FilterType0_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(0);
+    private void FilterType1_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(1);
+    private void FilterType2_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(2);
+    private void FilterType3_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(3);
+    private void FilterType4_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(4);
+    private void FilterType5_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleTypeFilter(5);
+
+    private void FilterRating1_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleRatingFilter(1);
+    private void FilterRating2_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleRatingFilter(2);
+    private void FilterRating3_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleRatingFilter(3);
+    private void FilterRating4_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleRatingFilter(4);
+    private void FilterRating5_Click(object sender, RoutedEventArgs e) => _viewModel?.ToggleRatingFilter(5);
+
+    private void ClearFilters_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.ClearFilters();
+    }
+
+    #endregion
+
+    #region Inspector Keyword Searches
+
+    private void SearchAuthorKeyword_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedItem != null && !string.IsNullOrWhiteSpace(_viewModel.SelectedItem.Author))
         {
-            if (item.Tag is string tag && tag == "all_books")
-            {
-                if (_viewModel != null) _viewModel.SelectedShelf = null;
-            }
-            else if (item.Tag is Shelf shelf)
-            {
-                if (_viewModel != null) _viewModel.SelectedShelf = shelf;
-            }
+            _viewModel.SearchKeyword(_viewModel.SelectedItem.Author, inAllLibrary: true);
         }
     }
 
-    private void GridView_ItemClick(object sender, ItemClickEventArgs e)
+    private void SearchKeywordA_Click(object sender, RoutedEventArgs e)
     {
-        if (e.ClickedItem is ItemViewModel book)
+        if (_viewModel?.SelectedItem != null && !string.IsNullOrWhiteSpace(_viewModel.SelectedItem.KeywordA))
         {
-            // Open detail or log selection
-            Debug.WriteLine($"Selected book: {book.Title}");
+            _viewModel.SearchKeyword(_viewModel.SelectedItem.KeywordA, inAllLibrary: true);
         }
     }
+
+    private void SearchKeywordB_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedItem != null && !string.IsNullOrWhiteSpace(_viewModel.SelectedItem.KeywordB))
+        {
+            _viewModel.SearchKeyword(_viewModel.SelectedItem.KeywordB, inAllLibrary: true);
+        }
+    }
+
+    private void SearchGenreKeyword_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedItem != null && !string.IsNullOrWhiteSpace(_viewModel.SelectedItem.Genre))
+        {
+            _viewModel.SearchKeyword(_viewModel.SelectedItem.Genre, inAllLibrary: true);
+        }
+    }
+
+    private void SearchRelationKeyword_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedItem != null && !string.IsNullOrWhiteSpace(_viewModel.SelectedItem.Relation))
+        {
+            _viewModel.SearchKeyword(_viewModel.SelectedItem.Relation, inAllLibrary: true);
+        }
+    }
+
+    #endregion
 }

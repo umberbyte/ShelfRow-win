@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media;
+using ShelfRow.App.Models;
 using ShelfRow.App.Services;
 using ShelfRow.Core.Models;
 using ShelfRow.Storage;
@@ -15,28 +16,221 @@ public class ItemViewModel : INotifyPropertyChanged
     private readonly Item _model;
     private readonly ThumbnailStorageManager _thumbnailManager;
     private readonly ThumbnailImageLoader? _imageLoader;
+    private readonly Action<Item>? _onModelChanged;
     private ImageSource? _thumbnailImage;
     private bool _isLoadingThumbnail;
 
     public ItemViewModel(
         Item model,
         ThumbnailStorageManager thumbnailManager,
-        ThumbnailImageLoader? imageLoader = null)
+        ThumbnailImageLoader? imageLoader = null,
+        Action<Item>? onModelChanged = null)
     {
         _model = model;
         _thumbnailManager = thumbnailManager;
         _imageLoader = imageLoader;
+        _onModelChanged = onModelChanged;
     }
 
     public Item Model => _model;
     public Guid Id => _model.Id;
-    public string Title => _model.Title;
-    public string Author => _model.Author;
-    public int Rating => _model.Rating;
-    public bool IsUnread => _model.IsUnread;
-    public string Genre => _model.Genre;
-    public int Pages => _model.Pages;
-    public string Memo => _model.Memo;
+
+    public string Title
+    {
+        get => _model.Title;
+        set
+        {
+            if (_model.Title != value)
+            {
+                _model.Title = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string Author
+    {
+        get => _model.Author;
+        set
+        {
+            if (_model.Author != value)
+            {
+                _model.Author = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public int Rating
+    {
+        get => _model.Rating;
+        set
+        {
+            if (_model.Rating != value)
+            {
+                _model.Rating = Math.Clamp(value, 0, 5);
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RatingStarsText));
+                NotifyChanged();
+            }
+        }
+    }
+
+    public bool IsUnread
+    {
+        get => _model.IsUnread;
+        set
+        {
+            if (_model.IsUnread != value)
+            {
+                _model.IsUnread = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(UnreadVisibility));
+                NotifyChanged();
+            }
+        }
+    }
+
+    public Microsoft.UI.Xaml.Visibility UnreadVisibility =>
+        IsUnread ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility AuthorVisibility =>
+        !string.IsNullOrWhiteSpace(Author) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility KeywordAVisibility =>
+        !string.IsNullOrWhiteSpace(KeywordA) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility KeywordBVisibility =>
+        !string.IsNullOrWhiteSpace(KeywordB) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility GenreVisibility =>
+        !string.IsNullOrWhiteSpace(Genre) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility RelationVisibility =>
+        !string.IsNullOrWhiteSpace(Relation) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public string Genre
+    {
+        get => _model.Genre;
+        set
+        {
+            if (_model.Genre != value)
+            {
+                _model.Genre = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string Relation
+    {
+        get => _model.Relation;
+        set
+        {
+            if (_model.Relation != value)
+            {
+                _model.Relation = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string KeywordA
+    {
+        get => _model.KeywordA;
+        set
+        {
+            if (_model.KeywordA != value)
+            {
+                _model.KeywordA = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string KeywordB
+    {
+        get => _model.KeywordB;
+        set
+        {
+            if (_model.KeywordB != value)
+            {
+                _model.KeywordB = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string Memo
+    {
+        get => _model.Memo;
+        set
+        {
+            if (_model.Memo != value)
+            {
+                _model.Memo = value;
+                OnPropertyChanged();
+                NotifyChanged();
+            }
+        }
+    }
+
+    public int Pages
+    {
+        get => _model.Pages;
+        set
+        {
+            if (_model.Pages != value)
+            {
+                _model.Pages = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PagesText));
+                NotifyChanged();
+            }
+        }
+    }
+
+    public int BookType
+    {
+        get => _model.BookType;
+        set
+        {
+            if (_model.BookType != value)
+            {
+                _model.BookType = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BookTypeGlyph));
+                OnPropertyChanged(nameof(BookTypeBrush));
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string BookTypeGlyph => BookTypeVisuals.GetGlyph(BookType);
+    public SolidColorBrush BookTypeBrush => BookTypeVisuals.GetBrush(BookType);
+
+    public DateTime AddedDate => _model.AddedDate;
+    public DateTime? LastReadDate => _model.LastReadDate;
+
+    public string AddedDateText => $"登録日: {_model.AddedDate:yyyy/MM/dd}";
+    public string LastReadDateText => _model.LastReadDate.HasValue ? $"読込日: {_model.LastReadDate.Value:yyyy/MM/dd}" : string.Empty;
+    public string PagesText => _model.Pages > 0 ? $"ページ数: {_model.Pages}p" : string.Empty;
+
+    public string RatingStarsText
+    {
+        get
+        {
+            int r = Math.Clamp(Rating, 0, 5);
+            return new string('★', r) + new string('☆', 5 - r);
+        }
+    }
+
     public int CoverVersion => _model.CoverVersion;
 
     public string LocalThumbnailPath => _thumbnailManager.GetLocalThumbnailPath(_model.Id);
@@ -88,10 +282,14 @@ public class ItemViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ThumbnailImage));
     }
 
+    private void NotifyChanged()
+    {
+        _onModelChanged?.Invoke(_model);
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
-
