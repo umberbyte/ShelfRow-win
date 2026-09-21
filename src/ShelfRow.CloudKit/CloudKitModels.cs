@@ -152,7 +152,14 @@ public class CKRecordOperation
     public string OperationType { get; set; } = "update"; // "create", "update", "forceUpdate", "delete"
 
     [JsonPropertyName("record")]
-    public CKRecord Record { get; set; } = new();
+    public object Record { get; set; } = new CKRecord();
+}
+
+/// <summary>CloudKit's delete contract accepts only the record name.</summary>
+public class CKDeleteRecord
+{
+    [JsonPropertyName("recordName")]
+    public string RecordName { get; set; } = string.Empty;
 }
 
 public class CKModifyRecordsResponse

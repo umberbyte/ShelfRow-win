@@ -54,7 +54,7 @@ public class CloudKitSyncEngine
                 request.Operations.Add(new CKRecordOperation
                 {
                     OperationType = "delete",
-                    Record = new CKRecord { RecordName = deletion.RecordName, RecordType = deletion.RecordType }
+                    Record = new CKDeleteRecord { RecordName = deletion.RecordName }
                 });
                 deletionOwners.Add(deletion.RecordName);
             }
@@ -84,7 +84,9 @@ public class CloudKitSyncEngine
                 request.Operations.Add(new CKRecordOperation
                 {
                     OperationType = link.IsDelete ? "delete" : "create",
-                    Record = record
+                    Record = link.IsDelete
+                        ? new CKDeleteRecord { RecordName = record.RecordName }
+                        : record
                 });
                 linkOwners[record.RecordName] = link;
             }

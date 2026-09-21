@@ -42,7 +42,8 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
 
         Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
             operation.GetProperty("operationType").GetString() == "delete"
-            && operation.GetProperty("record").GetProperty("recordType").GetString() == "CDMR");
+            && operation.GetProperty("record").EnumerateObject().Select(property => property.Name)
+                .SequenceEqual(new[] { "recordName" }));
         Assert.Empty((await repository.GetItemByIdAsync(item.Id))!.ShelfIds);
         Assert.Empty((await repository.GetPendingUploadsAsync()).ItemShelfChanges);
     }
@@ -70,7 +71,8 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
             operation.GetProperty("operationType").GetString() == "delete"
             && operation.GetProperty("record").GetProperty("recordName").GetString() == "ITEM-TO-DELETE"
-            && operation.GetProperty("record").GetProperty("recordType").GetString() == "CD_Item");
+            && operation.GetProperty("record").EnumerateObject().Select(property => property.Name)
+                .SequenceEqual(new[] { "recordName" }));
         Assert.Empty((await repository.GetPendingUploadsAsync()).Deletions);
     }
 
@@ -99,7 +101,9 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
                 return new
                 {
                     recordName = record.GetProperty("recordName").GetString(),
-                    recordType = record.GetProperty("recordType").GetString(),
+                    recordType = record.TryGetProperty("recordType", out var recordType)
+                        ? recordType.GetString()
+                        : null,
                     recordChangeTag = "server-v2",
                     fields = new Dictionary<string, object?>()
                 };
