@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.Web.WebView2.Core;
@@ -36,7 +37,19 @@ public sealed partial class CloudKitSignInWindow : Window
     {
         StatusText.Text = "サインインページを読み込んでいます...";
 
-        await AuthWebView.EnsureCoreWebView2Async();
+        // WebView2 otherwise keeps its cookies beside the executable, so every rebuild
+        // would throw away Apple's "keep me signed in" cookie and demand a full sign-in
+        // with two-factor again.
+        string userDataFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ShelfRow",
+            "WebView2");
+        Directory.CreateDirectory(userDataFolder);
+
+        var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
+            string.Empty, userDataFolder, new CoreWebView2EnvironmentOptions());
+
+        await AuthWebView.EnsureCoreWebView2Async(environment);
         AuthWebView.CoreWebView2.NavigationStarting += OnNavigationStarting;
         AuthWebView.CoreWebView2.Navigate(_signInUrl);
     }
