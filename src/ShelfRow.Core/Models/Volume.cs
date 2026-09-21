@@ -21,4 +21,9 @@ public class Volume
     /// Windows-specific local mount path (UNC e.g. \\NAS\Books or drive letter Z:\)
     /// </summary>
     public string? WindowsMountPath { get; set; }
+
+    /// <summary>CloudKit record name; see <see cref="Item.CloudKitRecordName"/>.</summary>
+    public string? CloudKitRecordName { get; set; }
+
+    public string? CloudKitChangeTag { get; set; }
 }

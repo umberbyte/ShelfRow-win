@@ -71,6 +71,24 @@ public class CKZoneRequestItem
     [JsonPropertyName("syncToken")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SyncToken { get; set; }
+
+    [JsonPropertyName("resultsLimit")]
+    public int ResultsLimit { get; set; } = 200;
+}
+
+public class CKErrorResponse
+{
+    [JsonPropertyName("uuid")]
+    public string? Uuid { get; set; }
+
+    [JsonPropertyName("serverErrorCode")]
+    public string? ServerErrorCode { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("redirectURL")]
+    public string? RedirectURL { get; set; }
 }
 
 public class CKChangesZoneResponse
@@ -96,6 +114,12 @@ public class CKZoneResponseItem
 
 public class CKModifyRecordsRequest
 {
+    /// <summary>
+    /// Without this the server writes to the default zone, where the Mac app never looks.
+    /// </summary>
+    [JsonPropertyName("zoneID")]
+    public CKZoneID? ZoneID { get; set; }
+
     [JsonPropertyName("operations")]
     public List<CKRecordOperation> Operations { get; set; } = new();
 }

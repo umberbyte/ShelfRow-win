@@ -15,72 +15,97 @@ public static class CloudKitMapper
     public const string ShelfRecordType = "CD_Shelf";
     public const string VolumeRecordType = "CD_Volume";
 
+    /// <summary>
+    /// Core Data's join record for many-to-many relationships. Item-to-Shelf membership
+    /// lives here rather than on either record.
+    /// </summary>
+    public const string ManyToManyRecordType = "CDMR";
+
+    // Field values arrive as JsonElement when deserialized and as CLR primitives when a
+    // record is built in code, so every accessor has to cope with both.
+    private static string? StringField(CKRecord record, string name)
+    {
+        if (!record.Fields.TryGetValue(name, out var field) || field.Value is null)
+            return null;
+
+        return field.Value is JsonElement element
+            ? element.ValueKind == JsonValueKind.String ? element.GetString() : element.ToString()
+            : field.Value.ToString();
+    }
+
+    private static long? LongField(CKRecord record, string name)
+    {
+        if (!record.Fields.TryGetValue(name, out var field) || field.Value is null)
+            return null;
+
+        if (field.Value is JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.Number => element.TryGetInt64(out long n) ? n : null,
+                JsonValueKind.String => long.TryParse(element.GetString(), out long s) ? s : null,
+                JsonValueKind.True => 1,
+                JsonValueKind.False => 0,
+                _ => null
+            };
+        }
+
+        return field.Value is IConvertible convertible
+            ? Convert.ToInt64(convertible)
+            : null;
+    }
+
+    private static int? IntField(CKRecord record, string name) => (int?)LongField(record, name);
+
+    private static DateTime? DateField(CKRecord record, string name)
+        => LongField(record, name) is { } ms
+            ? DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime
+            : null;
+
     public static Item? ToItem(CKRecord record)
     {
         if (record.RecordType != ItemRecordType) return null;
 
-        var item = new Item();
-        if (Guid.TryParse(record.RecordName, out var id))
+        var item = new Item
+        {
+            CloudKitRecordName = record.RecordName,
+            CloudKitChangeTag = record.RecordChangeTag
+        };
+
+        // The model's own identity is CD_id. record.RecordName is Core Data's separate
+        // identifier and does not equal it.
+        if (Guid.TryParse(StringField(record, "CD_id"), out var id))
         {
             item.Id = id;
         }
 
-        if (record.Fields.TryGetValue("CD_title", out var fTitle) && fTitle.Value != null)
-            item.Title = fTitle.Value.ToString() ?? "";
+        item.Title = StringField(record, "CD_title") ?? "";
+        item.Author = StringField(record, "CD_author") ?? "";
+        item.RelativePath = StringField(record, "CD_relativePath") ?? "";
+        item.Genre = StringField(record, "CD_genre") ?? "";
+        item.Relation = StringField(record, "CD_relation") ?? "";
+        item.KeywordA = StringField(record, "CD_keywordA") ?? "";
+        item.KeywordB = StringField(record, "CD_keywordB") ?? "";
+        item.Memo = StringField(record, "CD_memo") ?? "";
 
-        if (record.Fields.TryGetValue("CD_author", out var fAuthor) && fAuthor.Value != null)
-            item.Author = fAuthor.Value.ToString() ?? "";
+        item.Rating = IntField(record, "CD_rating") ?? 0;
+        item.IsUnread = (IntField(record, "CD_isUnread") ?? 1) != 0;
+        item.Pages = IntField(record, "CD_pages") ?? 0;
+        item.BookType = IntField(record, "CD_bookType") ?? 0;
+        item.FileType = IntField(record, "CD_fileType") ?? 0;
+        item.CoverVersion = IntField(record, "CD_coverVersion") ?? 0;
+        item.CoverBytes = LongField(record, "CD_coverBytes") ?? 0;
+        item.LegacyId = IntField(record, "CD_legacyID");
 
-        if (record.Fields.TryGetValue("CD_relativePath", out var fPath) && fPath.Value != null)
-            item.RelativePath = fPath.Value.ToString() ?? "";
+        item.AddedDate = DateField(record, "CD_addedDate") ?? item.AddedDate;
+        item.LastReadDate = DateField(record, "CD_lastReadDate");
 
-        if (record.Fields.TryGetValue("CD_rating", out var fRate) && fRate.Value != null)
-            item.Rating = Convert.ToInt32(fRate.Value);
+        item.CoverImageName = StringField(record, "CD_coverImageName") ?? "";
+        item.CoverImagePath = StringField(record, "CD_coverImagePath") ?? "";
 
-        if (record.Fields.TryGetValue("CD_isUnread", out var fUnread) && fUnread.Value != null)
-            item.IsUnread = Convert.ToInt32(fUnread.Value) != 0;
-
-        if (record.Fields.TryGetValue("CD_genre", out var fGen) && fGen.Value != null)
-            item.Genre = fGen.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_keywordA", out var fKa) && fKa.Value != null)
-            item.KeywordA = fKa.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_keywordB", out var fKb) && fKb.Value != null)
-            item.KeywordB = fKb.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_memo", out var fMemo) && fMemo.Value != null)
-            item.Memo = fMemo.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_pages", out var fPages) && fPages.Value != null)
-            item.Pages = Convert.ToInt32(fPages.Value);
-
-        if (record.Fields.TryGetValue("CD_coverVersion", out var fCvv) && fCvv.Value != null)
-            item.CoverVersion = Convert.ToInt32(fCvv.Value);
-
-        if (record.Fields.TryGetValue("CD_coverBytes", out var fCvb) && fCvb.Value != null)
-            item.CoverBytes = Convert.ToInt64(fCvb.Value);
-
-        if (record.Fields.TryGetValue("CD_legacyID", out var fLeg) && fLeg.Value != null)
-            item.LegacyId = Convert.ToInt32(fLeg.Value);
-
-        if (record.Fields.TryGetValue("CD_addedDate", out var fAdded) && fAdded.Value != null)
-        {
-            if (long.TryParse(fAdded.Value.ToString(), out long ms))
-                item.AddedDate = DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime;
-        }
-
-        if (record.Fields.TryGetValue("CD_lastReadDate", out var fLrd) && fLrd.Value != null)
-        {
-            if (long.TryParse(fLrd.Value.ToString(), out long ms))
-                item.LastReadDate = DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime;
-        }
-
-        if (record.Fields.TryGetValue("CD_volume", out var fVol) && fVol.Value is JsonElement je && je.TryGetProperty("recordName", out var vn))
-        {
-            if (Guid.TryParse(vn.GetString(), out var vId))
-                item.VolumeId = vId;
-        }
+        // Core Data writes to-one relationships as the target's record name in a plain
+        // string field, not as a CKReference.
+        item.VolumeRecordName = StringField(record, "CD_volume");
 
         return item;
     }
@@ -89,10 +114,15 @@ public static class CloudKitMapper
     {
         var record = new CKRecord
         {
-            RecordName = item.Id.ToString("D"),
-            RecordType = ItemRecordType
+            RecordName = item.CloudKitRecordName ?? Guid.NewGuid().ToString("D").ToUpperInvariant(),
+            RecordType = ItemRecordType,
+            RecordChangeTag = item.CloudKitChangeTag
         };
 
+        record.Fields["CD_entityName"] = new CKRecordField("Item");
+        record.Fields["CD_id"] = new CKRecordField(item.Id.ToString("D").ToUpperInvariant());
+        record.Fields["CD_coverImageName"] = new CKRecordField(item.CoverImageName);
+        record.Fields["CD_coverImagePath"] = new CKRecordField(item.CoverImagePath);
         record.Fields["CD_title"] = new CKRecordField(item.Title);
         record.Fields["CD_author"] = new CKRecordField(item.Author);
         record.Fields["CD_relativePath"] = new CKRecordField(item.RelativePath);
@@ -116,13 +146,8 @@ public static class CloudKitMapper
         if (item.LastReadDate.HasValue)
             record.Fields["CD_lastReadDate"] = new CKRecordField(new DateTimeOffset(item.LastReadDate.Value).ToUnixTimeMilliseconds());
 
-        if (item.VolumeId.HasValue)
-        {
-            record.Fields["CD_volume"] = new CKRecordField(new CKRecordReference
-            {
-                RecordName = item.VolumeId.Value.ToString("D")
-            });
-        }
+        if (!string.IsNullOrEmpty(item.VolumeRecordName))
+            record.Fields["CD_volume"] = new CKRecordField(item.VolumeRecordName);
 
         return record;
     }
@@ -131,32 +156,24 @@ public static class CloudKitMapper
     {
         if (record.RecordType != ShelfRecordType) return null;
 
-        var shelf = new Shelf();
-        if (Guid.TryParse(record.RecordName, out var id))
+        var shelf = new Shelf
+        {
+            CloudKitRecordName = record.RecordName,
+            CloudKitChangeTag = record.RecordChangeTag
+        };
+
+        if (Guid.TryParse(StringField(record, "CD_id"), out var id))
         {
             shelf.Id = id;
         }
 
-        if (record.Fields.TryGetValue("CD_title", out var fTitle) && fTitle.Value != null)
-            shelf.Title = fTitle.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_icon", out var fIcon) && fIcon.Value != null)
-            shelf.Icon = Convert.ToInt32(fIcon.Value);
-
-        if (record.Fields.TryGetValue("CD_type", out var fType) && fType.Value != null)
-            shelf.Type = Convert.ToInt32(fType.Value);
-
-        if (record.Fields.TryGetValue("CD_sortOrder", out var fOrder) && fOrder.Value != null)
-            shelf.SortOrder = Convert.ToInt32(fOrder.Value);
-
-        if (record.Fields.TryGetValue("CD_sortAscending", out var fAsc) && fAsc.Value != null)
-            shelf.SortAscending = Convert.ToInt32(fAsc.Value) != 0;
-
-        if (record.Fields.TryGetValue("CD_sortKey", out var fKey) && fKey.Value != null)
-            shelf.SortKey = fKey.Value.ToString() ?? "title";
-
-        if (record.Fields.TryGetValue("CD_smartConditionsJson", out var fJson) && fJson.Value != null)
-            shelf.SmartConditionsJson = fJson.Value.ToString();
+        shelf.Title = StringField(record, "CD_title") ?? "";
+        shelf.Icon = IntField(record, "CD_icon") ?? 0;
+        shelf.Type = IntField(record, "CD_type") ?? 0;
+        shelf.SortOrder = IntField(record, "CD_sortOrder") ?? 0;
+        shelf.SortAscending = (IntField(record, "CD_sortAscending") ?? 1) != 0;
+        shelf.SortKey = StringField(record, "CD_sortKey") ?? "title";
+        shelf.SmartConditionsJson = StringField(record, "CD_smartConditionsJson");
 
         return shelf;
     }
@@ -165,10 +182,13 @@ public static class CloudKitMapper
     {
         var record = new CKRecord
         {
-            RecordName = shelf.Id.ToString("D"),
-            RecordType = ShelfRecordType
+            RecordName = shelf.CloudKitRecordName ?? Guid.NewGuid().ToString("D").ToUpperInvariant(),
+            RecordType = ShelfRecordType,
+            RecordChangeTag = shelf.CloudKitChangeTag
         };
 
+        record.Fields["CD_entityName"] = new CKRecordField("Shelf");
+        record.Fields["CD_id"] = new CKRecordField(shelf.Id.ToString("D").ToUpperInvariant());
         record.Fields["CD_title"] = new CKRecordField(shelf.Title);
         record.Fields["CD_icon"] = new CKRecordField(shelf.Icon);
         record.Fields["CD_type"] = new CKRecordField(shelf.Type);
@@ -186,17 +206,19 @@ public static class CloudKitMapper
     {
         if (record.RecordType != VolumeRecordType) return null;
 
-        var vol = new Volume();
-        if (Guid.TryParse(record.RecordName, out var id))
+        var vol = new Volume
+        {
+            CloudKitRecordName = record.RecordName,
+            CloudKitChangeTag = record.RecordChangeTag
+        };
+
+        if (Guid.TryParse(StringField(record, "CD_id"), out var id))
         {
             vol.Id = id;
         }
 
-        if (record.Fields.TryGetValue("CD_name", out var fName) && fName.Value != null)
-            vol.Name = fName.Value.ToString() ?? "";
-
-        if (record.Fields.TryGetValue("CD_lastKnownPath", out var fPath) && fPath.Value != null)
-            vol.LastKnownPath = fPath.Value.ToString() ?? "";
+        vol.Name = StringField(record, "CD_name") ?? "";
+        vol.LastKnownPath = StringField(record, "CD_lastKnownPath") ?? "";
 
         return vol;
     }
@@ -205,13 +227,43 @@ public static class CloudKitMapper
     {
         var record = new CKRecord
         {
-            RecordName = volume.Id.ToString("D"),
-            RecordType = VolumeRecordType
+            RecordName = volume.CloudKitRecordName ?? Guid.NewGuid().ToString("D").ToUpperInvariant(),
+            RecordType = VolumeRecordType,
+            RecordChangeTag = volume.CloudKitChangeTag
         };
 
+        record.Fields["CD_entityName"] = new CKRecordField("Volume");
+        record.Fields["CD_id"] = new CKRecordField(volume.Id.ToString("D").ToUpperInvariant());
         record.Fields["CD_name"] = new CKRecordField(volume.Name);
         record.Fields["CD_lastKnownPath"] = new CKRecordField(volume.LastKnownPath);
 
         return record;
+    }
+
+    /// <summary>
+    /// One row of Core Data's many-to-many join table, as stored in a CDMR record.
+    /// </summary>
+    public readonly record struct ManyToManyLink(
+        string LeftEntity,
+        string RightEntity,
+        string LeftRecordName,
+        string RightRecordName);
+
+    /// <summary>
+    /// Reads a CDMR record, which encodes the pair as three parallel colon-separated
+    /// fields: CD_entityNames "Item:Shelf", CD_recordNames "&lt;item&gt;:&lt;shelf&gt;",
+    /// CD_relationships "shelves:items".
+    /// </summary>
+    public static ManyToManyLink? ToManyToManyLink(CKRecord record)
+    {
+        if (record.RecordType != ManyToManyRecordType) return null;
+
+        var entities = StringField(record, "CD_entityNames")?.Split(':');
+        var names = StringField(record, "CD_recordNames")?.Split(':');
+
+        if (entities is not { Length: 2 } || names is not { Length: 2 })
+            return null;
+
+        return new ManyToManyLink(entities[0], entities[1], names[0], names[1]);
     }
 }

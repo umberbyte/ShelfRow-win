@@ -27,7 +27,7 @@ public class CloudKitSyncEngine
 
         while (moreComing)
         {
-            var response = await _client.FetchZoneChangesAsync(syncToken, cancellationToken);
+            var response = await _client.FetchZoneChangesAsync(syncToken, cancellationToken: cancellationToken);
             if (response.Zones == null || response.Zones.Count == 0)
                 break;
 

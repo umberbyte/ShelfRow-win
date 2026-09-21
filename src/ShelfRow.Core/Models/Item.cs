@@ -22,6 +22,13 @@ public class Item
     public Guid? VolumeId { get; set; }
 
     /// <summary>
+    /// The volume's CloudKit record name, which is how the zone expresses this
+    /// relationship. Kept because <see cref="VolumeId"/> cannot be resolved until the
+    /// matching CD_Volume record has been seen, and writing the record back needs it.
+    /// </summary>
+    public string? VolumeRecordName { get; set; }
+
+    /// <summary>
     /// Relative path from the Volume root.
     /// </summary>
     public string RelativePath { get; set; } = string.Empty;
@@ -73,4 +80,17 @@ public class Item
     /// Associated shelves.
     /// </summary>
     public List<Guid> ShelfIds { get; set; } = new();
+
+    /// <summary>
+    /// The CloudKit record name, which is NOT <see cref="Id"/>: Core Data mints its own
+    /// record names and mirrors the model's id separately as CD_id. Relationships in the
+    /// zone point at record names, so a round trip is impossible without keeping this.
+    /// </summary>
+    public string? CloudKitRecordName { get; set; }
+
+    /// <summary>
+    /// The record's version as of the last sync, required to write it back without
+    /// clobbering a concurrent change from another device.
+    /// </summary>
+    public string? CloudKitChangeTag { get; set; }
 }

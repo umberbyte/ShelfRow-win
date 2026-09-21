@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -11,7 +11,22 @@ namespace ShelfRow.CloudKit;
 public class CloudKitConfiguration
 {
     public string ContainerIdentifier { get; set; } = "iCloud.com.eureka.ShelfRow";
-    public string Environment { get; set; } = "development"; // or "production"
+
+    /// <summary>"development" or "production". The Mac app's released builds write to production.</summary>
+    public string Environment { get; set; } = "production";
+
+    public string Database { get; set; } = "private";
+
+    /// <summary>
+    /// Created in CloudKit Console under API Access. Required on every request,
+    /// including ones that also carry a web auth token.
+    /// </summary>
+    public string? ApiToken { get; set; }
+
+    /// <summary>
+    /// Identifies the signed-in Apple ID. Required for the private database.
+    /// Obtained by sending the user through <see cref="CloudKitException.RedirectUrl"/>.
+    /// </summary>
     public string? WebAuthToken { get; set; }
 }
 
@@ -20,6 +35,12 @@ public class CloudKitClient
     private readonly HttpClient _httpClient;
     private readonly CloudKitConfiguration _config;
     private readonly JsonSerializerOptions _jsonOptions;
+
+    /// <summary>
+    /// Raised when CloudKit hands back a replacement web auth token, which it may do
+    /// on any response. The old one stops working, so the new one must be persisted.
+    /// </summary>
+    public event Action<string>? WebAuthTokenRenewed;
 
     public CloudKitClient(CloudKitConfiguration config, HttpClient? httpClient = null)
     {
@@ -32,54 +53,99 @@ public class CloudKitClient
         };
     }
 
+    public CloudKitConfiguration Configuration => _config;
+
     private string BuildUrl(string relativePath)
     {
-        string baseUri = $"https://api.apple-cloudkit.com/database/1/{_config.ContainerIdentifier}/{_config.Environment}/private";
-        string url = $"{baseUri}/{relativePath.TrimStart('/')}";
+        if (string.IsNullOrEmpty(_config.ApiToken))
+            throw new InvalidOperationException("CloudKit API token is not configured. Create one in CloudKit Console under API Access.");
+
+        string url = $"https://api.apple-cloudkit.com/database/1/{_config.ContainerIdentifier}/{_config.Environment}/{_config.Database}/{relativePath.TrimStart('/')}" +
+                     $"?ckAPIToken={Uri.EscapeDataString(_config.ApiToken)}";
+
         if (!string.IsNullOrEmpty(_config.WebAuthToken))
-        {
-            url += $"?ckWebAuthToken={Uri.EscapeDataString(_config.WebAuthToken)}";
-        }
+            url += $"&ckWebAuthToken={Uri.EscapeDataString(_config.WebAuthToken)}";
+
         return url;
     }
 
-    public async Task<CKChangesZoneResponse> FetchZoneChangesAsync(string? syncToken = null, CancellationToken cancellationToken = default)
+    private async Task<TResponse> PostAsync<TResponse>(string relativePath, object requestBody, CancellationToken cancellationToken)
+        where TResponse : new()
     {
-        string url = BuildUrl("changes/zone");
+        string json = JsonSerializer.Serialize(requestBody, requestBody.GetType(), _jsonOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var response = await _httpClient.PostAsync(BuildUrl(relativePath), content, cancellationToken);
+        string responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw ParseError(response.StatusCode, responseJson);
+
+        CaptureRenewedToken(responseJson);
+
+        return JsonSerializer.Deserialize<TResponse>(responseJson, _jsonOptions) ?? new TResponse();
+    }
+
+    private CloudKitException ParseError(System.Net.HttpStatusCode statusCode, string responseJson)
+    {
+        try
+        {
+            var error = JsonSerializer.Deserialize<CKErrorResponse>(responseJson, _jsonOptions);
+            if (error != null)
+                return new CloudKitException(statusCode, error.ServerErrorCode, error.Reason, error.RedirectURL);
+        }
+        catch (JsonException)
+        {
+        }
+
+        return new CloudKitException(statusCode, null, responseJson, null);
+    }
+
+    private void CaptureRenewedToken(string responseJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("ckWebAuthToken", out var renewed) &&
+                renewed.GetString() is { Length: > 0 } token &&
+                token != _config.WebAuthToken)
+            {
+                _config.WebAuthToken = token;
+                WebAuthTokenRenewed?.Invoke(token);
+            }
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Fetches records changed in the Core Data zone since <paramref name="syncToken"/>,
+    /// or every record in it when the token is null. Doubles as the authentication probe:
+    /// an unauthenticated call throws <see cref="CloudKitException"/> carrying the sign-in URL.
+    /// </summary>
+    public Task<CKChangesZoneResponse> FetchZoneChangesAsync(string? syncToken = null, int resultsLimit = 200, CancellationToken cancellationToken = default)
+    {
         var requestBody = new CKChangesZoneRequest
         {
-            Zones = new()
+            Zones =
             {
                 new CKZoneRequestItem
                 {
                     ZoneID = new CKZoneID { ZoneName = CloudKitMapper.CoreDataZoneName },
-                    SyncToken = syncToken
+                    SyncToken = syncToken,
+                    ResultsLimit = resultsLimit
                 }
             }
         };
 
-        string json = JsonSerializer.Serialize(requestBody, _jsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var response = await _httpClient.PostAsync(url, content, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        string responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<CKChangesZoneResponse>(responseJson, _jsonOptions)
-            ?? new CKChangesZoneResponse();
+        return PostAsync<CKChangesZoneResponse>("changes/zone", requestBody, cancellationToken);
     }
 
-    public async Task<CKModifyRecordsResponse> ModifyRecordsAsync(CKModifyRecordsRequest request, CancellationToken cancellationToken = default)
+    public Task<CKModifyRecordsResponse> ModifyRecordsAsync(CKModifyRecordsRequest request, CancellationToken cancellationToken = default)
     {
-        string url = BuildUrl("records/modify");
-        string json = JsonSerializer.Serialize(request, _jsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var response = await _httpClient.PostAsync(url, content, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        string responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<CKModifyRecordsResponse>(responseJson, _jsonOptions)
-            ?? new CKModifyRecordsResponse();
+        request.ZoneID ??= new CKZoneID { ZoneName = CloudKitMapper.CoreDataZoneName };
+        return PostAsync<CKModifyRecordsResponse>("records/modify", request, cancellationToken);
     }
 }

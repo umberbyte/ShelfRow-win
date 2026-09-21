@@ -29,5 +29,10 @@ public class Shelf
 
     public List<Guid> ItemIds { get; set; } = new();
 
+    /// <summary>CloudKit record name; see <see cref="Item.CloudKitRecordName"/>.</summary>
+    public string? CloudKitRecordName { get; set; }
+
+    public string? CloudKitChangeTag { get; set; }
+
     public bool IsSmart => Type == 1;
 }
