@@ -33,6 +33,7 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
             operation.GetProperty("operationType").GetString() == "create"
             && operation.GetProperty("record").GetProperty("recordType").GetString() == "CDMR");
+        Assert.All(handler.Requests, request => Assert.False(request.RootElement.GetProperty("atomic").GetBoolean()));
         Assert.Empty((await repository.GetPendingUploadsAsync()).ItemShelfChanges);
 
         handler.Requests.Clear();

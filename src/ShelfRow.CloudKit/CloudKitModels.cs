@@ -144,6 +144,12 @@ public class CKModifyRecordsRequest
 
     [JsonPropertyName("operations")]
     public List<CKRecordOperation> Operations { get; set; } = new();
+
+    /// <summary>
+    /// A single stale record must not reject unrelated books in the same 200-record batch.
+    /// </summary>
+    [JsonPropertyName("atomic")]
+    public bool Atomic { get; set; } = false;
 }
 
 public class CKRecordOperation
