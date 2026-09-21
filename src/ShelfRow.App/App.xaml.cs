@@ -116,7 +116,13 @@ public partial class App : Application
                 dispatcherQueue,
                 repository: repository,
                 distributionRootProvider: () => settingsService.Current.ThumbnailDistributionRoot);
-            MainViewModel = new MainViewModel(repository, thumbnailStorage, syncEngine, CloudKitAccount, ImageLoader, dispatcherQueue);
+            var coverGenerator = new CoverGenerationService(
+                repository,
+                thumbnailStorage,
+                () => settingsService.Current.ThumbnailDistributionRoot);
+            MainViewModel = new MainViewModel(
+                repository, thumbnailStorage, syncEngine, CloudKitAccount, ImageLoader,
+                dispatcherQueue, settingsService, coverGenerator);
 
             mainWindow.ViewModel = MainViewModel;
 

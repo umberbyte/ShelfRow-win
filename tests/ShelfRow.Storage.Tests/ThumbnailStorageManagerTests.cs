@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Threading.Tasks;
 using ShelfRow.Core.Models;
 using ShelfRow.Storage;
@@ -237,6 +238,32 @@ public class ThumbnailStorageManagerTests : IDisposable
         Assert.True(result.ManifestMissing);
         Assert.Equal(0, result.TotalFoundInNas);
         Assert.False(_manager.HasLocalThumbnail(itemId));
+    }
+
+    [Fact]
+    public async Task ZipCoverExtractor_ExtractsFirstImageAndIgnoresMetadata()
+    {
+        string archivePath = Path.Combine(_tempDir, "book.cbz");
+        await using (var file = File.Create(archivePath))
+        using (var archive = new ZipArchive(file, ZipArchiveMode.Create))
+        {
+            await WriteEntryAsync(archive, "notes.txt", new byte[] { 9 });
+            await WriteEntryAsync(archive, "__MACOSX/000.jpg", new byte[] { 8 });
+            await WriteEntryAsync(archive, "pages/002.png", new byte[] { 2, 2 });
+            await WriteEntryAsync(archive, "pages/001.jpg", new byte[] { 1, 1, 1 });
+        }
+
+        string destination = Path.Combine(_tempDir, "cover.jpg");
+        bool extracted = await new ZipCoverExtractor().ExtractFirstImageAsync(archivePath, destination);
+
+        Assert.True(extracted);
+        Assert.Equal(new byte[] { 1, 1, 1 }, await File.ReadAllBytesAsync(destination));
+    }
+
+    private static async Task WriteEntryAsync(ZipArchive archive, string name, byte[] bytes)
+    {
+        await using var stream = archive.CreateEntry(name).Open();
+        await stream.WriteAsync(bytes);
     }
 
     public void Dispose()

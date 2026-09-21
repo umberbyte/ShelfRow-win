@@ -25,6 +25,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly CloudKitAccount _cloudKitAccount;
     private readonly BookLauncher _bookLauncher;
     private readonly ThumbnailImageLoader? _imageLoader;
+    private readonly CoverGenerationService? _coverGenerator;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
     private readonly AppSettingsService _settingsService;
 
@@ -52,7 +53,8 @@ public class MainViewModel : INotifyPropertyChanged
         CloudKitAccount cloudKitAccount,
         ThumbnailImageLoader? imageLoader = null,
         Microsoft.UI.Dispatching.DispatcherQueue? dispatcherQueue = null,
-        AppSettingsService? settingsService = null)
+        AppSettingsService? settingsService = null,
+        CoverGenerationService? coverGenerator = null)
     {
         _repository = repository;
         _thumbnailManager = thumbnailManager;
@@ -61,6 +63,7 @@ public class MainViewModel : INotifyPropertyChanged
         _imageLoader = imageLoader;
         _dispatcherQueue = dispatcherQueue;
         _settingsService = settingsService ?? new AppSettingsService();
+        _coverGenerator = coverGenerator;
         _bookLauncher = new BookLauncher(_settingsService, new VolumePathResolver());
 
         Books = new ObservableCollection<ItemViewModel>();
@@ -525,7 +528,8 @@ public class MainViewModel : INotifyPropertyChanged
             _ => SortAscending ? query.OrderBy(i => i.Title) : query.OrderByDescending(i => i.Title)
         };
 
-        var filteredList = query.Select(item => new ItemViewModel(item, _thumbnailManager, _imageLoader, OnItemModelChanged)).ToList();
+        var filteredList = query.Select(item => new ItemViewModel(
+            item, _thumbnailManager, _imageLoader, OnItemModelChanged, _coverGenerator)).ToList();
 
         RunOnUI(() =>
         {
@@ -894,6 +898,8 @@ public class MainViewModel : INotifyPropertyChanged
 
             foreach (var root in roots)
             {
+                if (_coverGenerator is not null)
+                    await _coverGenerator.PublishPendingAsync(root, cancellationToken);
                 var res = await _thumbnailManager.SyncAllThumbnailsFromNasAsync(
                     root,
                     libraryItemIds,
@@ -985,10 +991,15 @@ public class MainViewModel : INotifyPropertyChanged
             });
 
             await using var stream = File.OpenRead(xmlFilePath);
+            string inferredLegacyAssets = Path.Combine(
+                Path.GetDirectoryName(xmlFilePath) ?? string.Empty,
+                Path.GetFileNameWithoutExtension(xmlFilePath));
             var mergeContext = new StackroomImportMergeContext(
                 await _repository.GetItemsForImportMergeAsync(cancellationToken),
                 await _repository.GetShelvesAsync(cancellationToken),
-                await _repository.GetVolumesAsync(cancellationToken));
+                await _repository.GetVolumesAsync(cancellationToken),
+                Directory.Exists(inferredLegacyAssets) ? inferredLegacyAssets : null,
+                _thumbnailManager.LocalCacheDirectory);
             var result = await importer.ImportAsync(stream, mergeContext, progress, cancellationToken);
             StatusMessage = "インポートデータをデータベースへ保存中...";
 

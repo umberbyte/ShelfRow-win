@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ShelfRow.Core.Models;
 using ShelfRow.Data;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace ShelfRow.Data.Tests;
@@ -168,6 +169,21 @@ public class SqliteShelfRowRepositoryTests : IDisposable
         Assert.Empty(pending.Items);
         Assert.Empty(pending.Shelves);
         Assert.Empty(pending.Volumes);
+    }
+
+    [Fact]
+    public async Task ForeignKeys_RejectUnknownShelfMembership()
+    {
+        await _repository.InitializeAsync();
+        var item = new Item
+        {
+            Title = "Broken membership",
+            RelativePath = "broken.zip",
+            ShelfIds = { Guid.NewGuid() }
+        };
+
+        await Assert.ThrowsAsync<SqliteException>(() => _repository.UpsertItemAsync(item));
+        Assert.Equal(0, await _repository.GetItemCountAsync());
     }
 
     [Fact]

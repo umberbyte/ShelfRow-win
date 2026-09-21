@@ -21,6 +21,18 @@ public class StackroomXmlImporterTests
     }
 
     [Fact]
+    public void Parse_InvalidDateProducesNullInsteadOfCurrentTime()
+    {
+        const string xml = "<plist><dict><key>Bad Date</key><date>not-a-date</date></dict></plist>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        var result = Assert.IsType<System.Collections.Generic.Dictionary<string, object?>>(ApplePlistParser.Parse(stream));
+
+        Assert.True(result.ContainsKey("Bad Date"));
+        Assert.Null(result["Bad Date"]);
+    }
+
+    [Fact]
     public async Task ImportAsync_ParsesBooksAndShelvesCorrectly()
     {
         string sampleXml = @"<?xml version=""1.0"" encoding=""UTF-8""?>
@@ -150,5 +162,36 @@ public class StackroomXmlImporterTests
         Assert.Equal(2, result.ItemsWithUpdatedShelfMembership.Count);
         Assert.Contains(importedShelf.Id, legacyMatch.ShelfIds);
         Assert.Contains(importedShelf.Id, pathMatch.ShelfIds);
+    }
+
+    [Fact]
+    public async Task ImportAsync_CopiesLegacyThumbnailForExistingItem()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"shelfrow_legacy_{Guid.NewGuid():N}");
+        string assets = Path.Combine(root, "Stackroom Library", "101");
+        string cache = Path.Combine(root, "cache");
+        Directory.CreateDirectory(assets);
+        byte[] thumbnail = { 1, 2, 3, 4 };
+        await File.WriteAllBytesAsync(Path.Combine(assets, "thumbnail.jpg"), thumbnail);
+        try
+        {
+            const string xml = "<plist><dict><key>Books</key><dict><key>101</key><dict>" +
+                "<key>ID</key><integer>101</integer><key>Path</key><string>/Volumes/Books/a.zip</string>" +
+                "</dict></dict></dict></plist>";
+            var existing = new Item { LegacyId = 101, RelativePath = "a.zip" };
+            var context = new StackroomImportMergeContext(
+                new[] { existing }, Array.Empty<Shelf>(), Array.Empty<Volume>(),
+                Path.Combine(root, "Stackroom Library"), cache);
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+            var result = await new StackroomXmlImporter().ImportAsync(stream, context);
+
+            Assert.Equal(1, result.SkippedBooks);
+            Assert.Equal(thumbnail, await File.ReadAllBytesAsync(Path.Combine(cache, $"{existing.Id:D}.jpg")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 }

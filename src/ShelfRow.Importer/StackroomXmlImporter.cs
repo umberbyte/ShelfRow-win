@@ -24,7 +24,9 @@ public class StackroomImportResult
 public sealed record StackroomImportMergeContext(
     IReadOnlyCollection<Item> ExistingItems,
     IReadOnlyCollection<Shelf> ExistingShelves,
-    IReadOnlyCollection<Volume> ExistingVolumes)
+    IReadOnlyCollection<Volume> ExistingVolumes,
+    string? LegacyAssetsRoot = null,
+    string? LocalThumbnailDirectory = null)
 {
     public static StackroomImportMergeContext Empty { get; } = new(
         Array.Empty<Item>(), Array.Empty<Shelf>(), Array.Empty<Volume>());
@@ -124,6 +126,8 @@ public class StackroomXmlImporter
                 if (legacyId.HasValue)
                 {
                     importedItemsByLegacyId[legacyId.Value] = existingItem;
+                    await CopyLegacyThumbnailIfMissingAsync(
+                        mergeContext, legacyId.Value, existingItem.Id, cancellationToken);
                 }
                 result.SkippedBooks++;
                 booksProcessed++;
@@ -180,6 +184,8 @@ public class StackroomXmlImporter
             if (legacyId.HasValue)
             {
                 importedItemsByLegacyId[legacyId.Value] = item;
+                await CopyLegacyThumbnailIfMissingAsync(
+                    mergeContext, legacyId.Value, item.Id, cancellationToken);
             }
 
             booksProcessed++;
@@ -262,5 +268,26 @@ public class StackroomXmlImporter
         }
 
         return result;
+    }
+
+    private static async Task CopyLegacyThumbnailIfMissingAsync(
+        StackroomImportMergeContext context,
+        int legacyId,
+        Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(context.LegacyAssetsRoot)
+            || string.IsNullOrWhiteSpace(context.LocalThumbnailDirectory))
+            return;
+
+        string source = Path.Combine(context.LegacyAssetsRoot, legacyId.ToString(), "thumbnail.jpg");
+        string destination = Path.Combine(context.LocalThumbnailDirectory, $"{itemId:D}.jpg");
+        if (!File.Exists(source) || File.Exists(destination))
+            return;
+
+        Directory.CreateDirectory(context.LocalThumbnailDirectory);
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
+        await input.CopyToAsync(output, cancellationToken);
     }
 }

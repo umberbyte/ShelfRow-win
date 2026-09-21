@@ -57,6 +57,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         cmd.CommandText = @"
             PRAGMA journal_mode = WAL;
             PRAGMA synchronous = NORMAL;
+            PRAGMA foreign_keys = ON;
 
             CREATE TABLE IF NOT EXISTS Volumes (
                 Id TEXT PRIMARY KEY,

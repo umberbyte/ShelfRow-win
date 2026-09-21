@@ -17,6 +17,7 @@ public class ItemViewModel : INotifyPropertyChanged
     private readonly ThumbnailStorageManager _thumbnailManager;
     private readonly ThumbnailImageLoader? _imageLoader;
     private readonly Action<Item>? _onModelChanged;
+    private readonly CoverGenerationService? _coverGenerator;
     private ImageSource? _thumbnailImage;
     private bool _isLoadingThumbnail;
 
@@ -24,12 +25,14 @@ public class ItemViewModel : INotifyPropertyChanged
         Item model,
         ThumbnailStorageManager thumbnailManager,
         ThumbnailImageLoader? imageLoader = null,
-        Action<Item>? onModelChanged = null)
+        Action<Item>? onModelChanged = null,
+        CoverGenerationService? coverGenerator = null)
     {
         _model = model;
         _thumbnailManager = thumbnailManager;
         _imageLoader = imageLoader;
         _onModelChanged = onModelChanged;
+        _coverGenerator = coverGenerator;
     }
 
     public Item Model => _model;
@@ -276,6 +279,12 @@ public class ItemViewModel : INotifyPropertyChanged
         try
         {
             var image = await _imageLoader.LoadThumbnailAsync(_model.Id, nasDistributionRoot, cancellationToken);
+            if (image is null && _coverGenerator is not null
+                && await _coverGenerator.GenerateAsync(_model, cancellationToken))
+            {
+                _imageLoader.InvalidateManifest();
+                image = await _imageLoader.LoadThumbnailAsync(_model.Id, nasDistributionRoot, cancellationToken);
+            }
             if (image != null)
             {
                 ThumbnailImage = image;
