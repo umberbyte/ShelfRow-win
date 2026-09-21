@@ -480,7 +480,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="タイトル:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Title, Mode=TwoWay}" FontSize="12" />
+                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Title, Mode=TwoWay}" FontSize="12" Tag="Title" GotFocus="InspectorTextBox_GotFocus" />
                             </Grid>
 
                             <!-- Author -->
@@ -491,7 +491,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.AuthorFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Author, Mode=TwoWay}" FontSize="12" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Author, Mode=TwoWay}" FontSize="12" Tag="Author" GotFocus="InspectorTextBox_GotFocus" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchAuthorKeyword_Click"
                                         Content="{x:Bind ViewModel.SearchAuthorLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.AuthorVisibility, Mode=OneWay}" />
@@ -521,7 +521,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.KeywordAFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordA, Mode=TwoWay}" FontSize="12" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordA, Mode=TwoWay}" FontSize="12" Tag="KeywordA" GotFocus="InspectorTextBox_GotFocus" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordA_Click"
                                         Content="{x:Bind ViewModel.SearchKeywordALabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.KeywordAVisibility, Mode=OneWay}" />
@@ -535,7 +535,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.KeywordBFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordB, Mode=TwoWay}" FontSize="12" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordB, Mode=TwoWay}" FontSize="12" Tag="KeywordB" GotFocus="InspectorTextBox_GotFocus" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordB_Click"
                                         Content="{x:Bind ViewModel.SearchKeywordBLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.KeywordBVisibility, Mode=OneWay}" />
@@ -548,7 +548,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="メモ:" FontSize="12" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,6,0,0" />
-                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Memo, Mode=TwoWay}" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="70" />
+                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Memo, Mode=TwoWay}" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="70" Tag="Memo" GotFocus="InspectorTextBox_GotFocus" />
                             </Grid>
 
                             <!-- Genre -->
@@ -559,7 +559,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.GenreFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Genre, Mode=TwoWay}" FontSize="12" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Genre, Mode=TwoWay}" FontSize="12" Tag="Genre" GotFocus="InspectorTextBox_GotFocus" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchGenreKeyword_Click"
                                         Content="{x:Bind ViewModel.SearchGenreLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.GenreVisibility, Mode=OneWay}" />
@@ -573,12 +573,29 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.RelationFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Relation, Mode=TwoWay}" FontSize="12" />
+                                    <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Relation, Mode=TwoWay}" FontSize="12" Tag="Relation" GotFocus="InspectorTextBox_GotFocus" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchRelationKeyword_Click"
                                         Content="{x:Bind ViewModel.SearchRelationLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.RelationVisibility, Mode=OneWay}" />
                             </StackPanel>
-                        </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <Grid>
+                                    <TextBlock Text="スタンプ:" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Button Content="編集" HorizontalAlignment="Right" Padding="6,1" FontSize="11" Click="EditStamps_Click" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Stamps, Mode=OneWay}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding}" Tag="{Binding}" Click="Stamp_Click" Padding="7,3" Margin="0,0,4,4" FontSize="10" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
 
                         <MenuFlyoutSeparator />
 

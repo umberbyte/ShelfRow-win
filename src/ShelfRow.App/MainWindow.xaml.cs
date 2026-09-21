@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
 {
     private MainViewModel? _viewModel;
     private PreferencesWindow? _preferencesWindow;
+    private string _stampTarget = "KeywordA";
 
     public MainWindow()
     {
@@ -120,6 +121,41 @@ public sealed partial class MainWindow : Window
                 XamlRoot = root
             }.ShowAsync();
         }
+    }
+
+    private void InspectorTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { Tag: string field }) _stampTarget = field;
+    }
+
+    private void Stamp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string stamp }) _viewModel?.ApplyStamp(_stampTarget, stamp);
+    }
+
+    private async void EditStamps_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null || Content?.XamlRoot is not { } root) return;
+        var editor = new TextBox
+        {
+            Text = string.Join(Environment.NewLine, _viewModel.Stamps),
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinWidth = 360,
+            MinHeight = 220,
+            PlaceholderText = "1行に1つ入力してください"
+        };
+        var dialog = new ContentDialog
+        {
+            Title = "スタンプを編集",
+            Content = editor,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = root
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            _viewModel.SaveStamps(editor.Text);
     }
 
     private void ViewModel_OpenSettingsRequested(object? sender, EventArgs e)

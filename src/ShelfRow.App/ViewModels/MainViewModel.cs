@@ -71,6 +71,7 @@ public class MainViewModel : INotifyPropertyChanged
         StaticShelves = new ObservableCollection<Shelf>();
         SmartShelves = new ObservableCollection<Shelf>();
         Volumes = new ObservableCollection<VolumeViewModel>();
+        Stamps = new ObservableCollection<string>(ParseStamps(Settings.StampsList));
 
         // Load persisted view preferences
         _isGridView = _settingsService.Current.MainViewIsGrid;
@@ -107,6 +108,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<Shelf> StaticShelves { get; }
     public ObservableCollection<Shelf> SmartShelves { get; }
     public ObservableCollection<VolumeViewModel> Volumes { get; }
+    public ObservableCollection<string> Stamps { get; }
 
     public AppSettings Settings => _settingsService.Current;
     public CoverGenerationService? CoverGenerator => _coverGenerator;
@@ -139,8 +141,39 @@ public class MainViewModel : INotifyPropertyChanged
             nameof(TypeName0), nameof(TypeName1), nameof(TypeName2),
             nameof(TypeName3), nameof(TypeName4), nameof(TypeName5), nameof(SortKeyLabel)
         }) OnPropertyChanged(property);
+        Stamps.Clear();
+        foreach (string stamp in ParseStamps(Settings.StampsList)) Stamps.Add(stamp);
         ApplyFilterAndSort();
     }
+
+    public void SaveStamps(string text)
+    {
+        var stamps = ParseStamps(text).Distinct(StringComparer.Ordinal).ToArray();
+        Settings.StampsList = string.Join('\n', stamps);
+        _settingsService.Save();
+        Stamps.Clear();
+        foreach (string stamp in stamps) Stamps.Add(stamp);
+    }
+
+    public void ApplyStamp(string field, string stamp)
+    {
+        if (SelectedItem is null || string.IsNullOrEmpty(stamp)) return;
+        static string Append(string value, string addition) => string.IsNullOrEmpty(value) ? addition : value + addition;
+        switch (field)
+        {
+            case "Title": SelectedItem.Title = Append(SelectedItem.Title, stamp); break;
+            case "Author": SelectedItem.Author = Append(SelectedItem.Author, stamp); break;
+            case "KeywordA": SelectedItem.KeywordA = Append(SelectedItem.KeywordA, stamp); break;
+            case "KeywordB": SelectedItem.KeywordB = Append(SelectedItem.KeywordB, stamp); break;
+            case "Memo": SelectedItem.Memo = Append(SelectedItem.Memo, stamp); break;
+            case "Genre": SelectedItem.Genre = Append(SelectedItem.Genre, stamp); break;
+            case "Relation": SelectedItem.Relation = Append(SelectedItem.Relation, stamp); break;
+        }
+    }
+
+    private static IEnumerable<string> ParseStamps(string? text) =>
+        (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(stamp => stamp.Length > 0);
 
     public System.Windows.Input.ICommand SyncCommand { get; }
     public System.Windows.Input.ICommand SyncThumbnailsCommand { get; }

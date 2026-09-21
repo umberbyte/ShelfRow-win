@@ -56,6 +56,7 @@ public class AppSettings
 
     // Customize - Rename format
     public string CustomRenameFormat { get; set; } = "[@author] @title";
+    public string StampsList { get; set; } = string.Empty;
 
     // Customize - Type Names (empty = default: 厚い本, 薄い本, 本の一部, 画像セット, テキスト, ムービー)
     public string TypeNameThickBook { get; set; } = "";
@@ -115,4 +116,3 @@ public class AppSettings
     public string EffectiveKeywordALabel => string.IsNullOrWhiteSpace(FieldNameKeywordA) ? "キーワードA" : FieldNameKeywordA;
     public string EffectiveKeywordBLabel => string.IsNullOrWhiteSpace(FieldNameKeywordB) ? "キーワードB" : FieldNameKeywordB;
 }
-
