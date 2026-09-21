@@ -432,16 +432,41 @@ public sealed partial class PreferencesWindow : Window
 
     private async void PurgeCloudData_Click(object sender, RoutedEventArgs e)
     {
+        var confirmation = new TextBox
+        {
+            PlaceholderText = "確認のため「削除」と入力してください",
+            MinWidth = 380
+        };
         var dialog = new ContentDialog
         {
             Title = "iCloudのデータを削除",
-            Content = "このアプリがiCloudに保存している書誌情報を完全に削除します。よろしいですか？",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "このアプリがiCloudに保存している書誌情報を完全に削除します。端末内の蔵書は残りますが、この操作は取り消せません。先に他の端末でも同期を止めてください。",
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxWidth = 460
+                    },
+                    confirmation
+                }
+            },
             PrimaryButtonText = "完全に削除",
             CloseButtonText = "キャンセル",
             DefaultButton = ContentDialogButton.Close,
+            IsPrimaryButtonEnabled = false,
             XamlRoot = this.Content.XamlRoot
         };
-        await dialog.ShowAsync();
+        confirmation.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = confirmation.Text == "削除";
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            TxtCloudAuthStatus.Text = "iCloudのデータを削除しています...";
+            await _mainViewModel.PurgeCloudDataAsync();
+            TxtCloudAuthStatus.Text = _mainViewModel.StatusMessage;
+        }
     }
 
     private async void SyncThumbnailsNow_Click(object sender, RoutedEventArgs e)

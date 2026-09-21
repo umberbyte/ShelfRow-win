@@ -9,7 +9,7 @@ namespace ShelfRow.CloudKit;
 
 public class CloudKitSyncEngine
 {
-    private const string SyncTokenKey = "CloudKit_SyncToken";
+    public const string SyncTokenKey = "CloudKit_SyncToken";
     private readonly CloudKitClient _client;
     private readonly IShelfRowRepository _repository;
 

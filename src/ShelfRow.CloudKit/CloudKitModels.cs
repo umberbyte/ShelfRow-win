@@ -123,6 +123,15 @@ public class CKZoneResponseItem
 
     [JsonPropertyName("records")]
     public List<CKRecord>? Records { get; set; }
+
+    [JsonPropertyName("serverErrorCode")]
+    public string? ServerErrorCode { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("redirectURL")]
+    public string? RedirectURL { get; set; }
 }
 
 public class CKModifyRecordsRequest
@@ -150,4 +159,31 @@ public class CKModifyRecordsResponse
 {
     [JsonPropertyName("records")]
     public List<CKRecord>? Records { get; set; }
+}
+
+public class CKModifyZonesRequest
+{
+    [JsonPropertyName("operations")]
+    public List<CKZoneOperation> Operations { get; set; } = new();
+}
+
+public class CKZoneOperation
+{
+    [JsonPropertyName("operationType")]
+    public string OperationType { get; set; } = "delete";
+
+    [JsonPropertyName("zone")]
+    public CKZone Zone { get; set; } = new();
+}
+
+public class CKZone
+{
+    [JsonPropertyName("zoneID")]
+    public CKZoneID ZoneID { get; set; } = new();
+}
+
+public class CKModifyZonesResponse
+{
+    [JsonPropertyName("zones")]
+    public List<CKZoneResponseItem>? Zones { get; set; }
 }

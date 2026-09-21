@@ -102,4 +102,7 @@ public class CloudKitAccount
             return await operation(cancellationToken);
         }
     }
+
+    public Task<CKModifyZonesResponse> DeleteCoreDataZoneAsync(CancellationToken cancellationToken = default)
+        => ExecuteAsync(ct => _client.DeleteCoreDataZoneAsync(ct), cancellationToken);
 }

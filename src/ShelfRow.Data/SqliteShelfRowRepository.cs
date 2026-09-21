@@ -1123,6 +1123,15 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task DeleteSyncMetadataAsync(string key, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM SyncMetadata WHERE Key = @Key";
+        cmd.Parameters.AddWithValue("@Key", key);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task ConfirmItemShelfUploadedAsync(
         Guid itemId,
         Guid shelfId,

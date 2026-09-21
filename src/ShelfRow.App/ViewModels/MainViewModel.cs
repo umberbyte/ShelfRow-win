@@ -939,6 +939,23 @@ public class MainViewModel : INotifyPropertyChanged
         await SyncWithCloudKitAsync(cancellationToken);
     }
 
+    public async Task PurgeCloudDataAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            StatusMessage = "iCloudのデータを削除しています...";
+            await _cloudKitAccount.LoadAsync(cancellationToken);
+            await _cloudKitAccount.DeleteCoreDataZoneAsync(cancellationToken);
+            await _repository.DeleteSyncMetadataAsync(CloudKitSyncEngine.SyncTokenKey, cancellationToken);
+            await _cloudKitAccount.SignOutAsync(cancellationToken);
+            StatusMessage = "iCloudのデータを削除し、サインアウトしました。端末内の蔵書は残っています。";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"iCloudデータの削除に失敗しました: {ex.Message}";
+        }
+    }
+
     private bool _isSyncingThumbnails;
     public bool IsSyncingThumbnails
     {

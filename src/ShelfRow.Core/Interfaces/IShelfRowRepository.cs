@@ -43,6 +43,7 @@ public interface IShelfRowRepository
 
     Task<string?> GetSyncMetadataAsync(string key, CancellationToken cancellationToken = default);
     Task SetSyncMetadataAsync(string key, string value, CancellationToken cancellationToken = default);
+    Task DeleteSyncMetadataAsync(string key, CancellationToken cancellationToken = default);
 
     Task<int> ApplyItemShelfLinksAsync(IEnumerable<ItemShelfLink> links, CancellationToken cancellationToken = default);
 

@@ -160,4 +160,30 @@ public class CloudKitClient
         request.ZoneID ??= new CKZoneID { ZoneName = CloudKitMapper.CoreDataZoneName };
         return PostAsync<CKModifyRecordsResponse>("records/modify", request, cancellationToken);
     }
+
+    /// <summary>Deletes ShelfRow's custom Core Data zone from the private database.</summary>
+    public async Task<CKModifyZonesResponse> DeleteCoreDataZoneAsync(CancellationToken cancellationToken = default)
+    {
+        var request = new CKModifyZonesRequest
+        {
+            Operations =
+            {
+                new CKZoneOperation
+                {
+                    OperationType = "delete",
+                    Zone = new CKZone
+                    {
+                        ZoneID = new CKZoneID { ZoneName = CloudKitMapper.CoreDataZoneName }
+                    }
+                }
+            }
+        };
+        var response = await PostAsync<CKModifyZonesResponse>("zones/modify", request, cancellationToken);
+        var result = response.Zones?.Count > 0 ? response.Zones[0] : null;
+        if (result is null)
+            throw new CloudKitException(System.Net.HttpStatusCode.OK, "INVALID_RESPONSE", "Zone deletion returned no result.", null);
+        if (result.ServerErrorCode is not null)
+            throw new CloudKitException(System.Net.HttpStatusCode.OK, result.ServerErrorCode, result.Reason, result.RedirectURL);
+        return response;
+    }
 }
