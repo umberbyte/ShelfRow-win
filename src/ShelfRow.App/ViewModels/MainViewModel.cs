@@ -686,6 +686,14 @@ public class MainViewModel : INotifyPropertyChanged
         try
         {
             var list = await _repository.GetVolumesAsync();
+            string? distributionRoot = _settingsService.Current.ThumbnailDistributionRoot;
+            if (string.IsNullOrWhiteSpace(distributionRoot) || !Directory.Exists(distributionRoot))
+            {
+                distributionRoot = list
+                    .Select(volume => ThumbnailStorageManager.FindDistributionRoot(volume.WindowsMountPath))
+                    .FirstOrDefault(root => root is not null);
+            }
+            _imageLoader?.SetDistributionRoot(distributionRoot);
             RunOnUI(() =>
             {
                 Volumes.Clear();
@@ -880,21 +888,45 @@ public class MainViewModel : INotifyPropertyChanged
                 ThumbnailSyncProgressText = $"サムネイルを取得中: {p.Processed} / {p.Total} 件";
             });
 
+            var libraryItemIds = await _repository.GetAllItemIdsAsync(cancellationToken);
+            var localStates = (await _repository.GetLocalCoverStatesAsync(cancellationToken))
+                .ToDictionary(state => state.ItemId);
+
             foreach (var root in roots)
             {
-                var res = await _thumbnailManager.SyncAllThumbnailsFromNasAsync(root, progress, maxConcurrency: 4, cancellationToken);
+                var res = await _thumbnailManager.SyncAllThumbnailsFromNasAsync(
+                    root,
+                    libraryItemIds,
+                    localStates,
+                    progress,
+                    maxConcurrency: 4,
+                    cancellationToken);
                 aggregateResult.TotalFoundInNas += res.TotalFoundInNas;
                 aggregateResult.Fetched += res.Fetched;
                 aggregateResult.AlreadyCached += res.AlreadyCached;
                 aggregateResult.Failed += res.Failed;
+                aggregateResult.SuppressedAfterFailures += res.SuppressedAfterFailures;
+                aggregateResult.ManifestMissing |= res.ManifestMissing;
+                if (res.StateUpdates.Count > 0)
+                {
+                    await _repository.UpsertLocalCoverStatesAsync(res.StateUpdates, cancellationToken);
+                    foreach (var state in res.StateUpdates)
+                        localStates[state.ItemId] = state;
+                }
             }
 
-            string msg = $"サムネイル同期完了: {aggregateResult.Fetched} 件取得、{aggregateResult.AlreadyCached} 件キャッシュ済み";
+            string msg = aggregateResult.ManifestMissing && aggregateResult.TotalFoundInNas == 0
+                ? "サムネイル同期を中止しました: 配布マニフェストがありません"
+                : $"サムネイル同期完了: {aggregateResult.Fetched} 件取得、" +
+                  $"{aggregateResult.AlreadyCached} 件キャッシュ済み、" +
+                  $"{aggregateResult.Failed} 件失敗、{aggregateResult.SuppressedAfterFailures} 件再試行停止";
             ThumbnailSyncProgressText = msg;
             StatusMessage = msg;
 
             if (aggregateResult.Fetched > 0)
             {
+                _imageLoader?.ClearMemoryCache();
+                _imageLoader?.InvalidateManifest();
                 RunOnUI(() =>
                 {
                     foreach (var book in Books)
@@ -953,33 +985,38 @@ public class MainViewModel : INotifyPropertyChanged
             });
 
             await using var stream = File.OpenRead(xmlFilePath);
-            var result = await importer.ImportAsync(stream, progress, cancellationToken);
+            var mergeContext = new StackroomImportMergeContext(
+                await _repository.GetItemsForImportMergeAsync(cancellationToken),
+                await _repository.GetShelvesAsync(cancellationToken),
+                await _repository.GetVolumesAsync(cancellationToken));
+            var result = await importer.ImportAsync(stream, mergeContext, progress, cancellationToken);
             StatusMessage = "インポートデータをデータベースへ保存中...";
-
-            int importedBooks = 0;
-            foreach (var item in result.ImportedBooks)
-            {
-                await _repository.UpsertItemAsync(item, cancellationToken: cancellationToken);
-                importedBooks++;
-            }
-
-            int importedShelves = 0;
-            foreach (var shelf in result.ImportedShelves)
-            {
-                await _repository.UpsertShelfAsync(shelf, cancellationToken: cancellationToken);
-                importedShelves++;
-            }
 
             foreach (var vol in result.DiscoveredVolumes)
             {
                 await _repository.UpsertVolumeAsync(vol, cancellationToken: cancellationToken);
             }
 
+            foreach (var shelf in result.ImportedShelves)
+            {
+                await _repository.UpsertShelfAsync(shelf, cancellationToken: cancellationToken);
+            }
+
+            var itemsToSave = result.ImportedBooks
+                .Concat(result.ItemsWithUpdatedShelfMembership)
+                .ToList();
+            if (itemsToSave.Count > 0)
+            {
+                await _repository.UpsertItemsBatchAsync(itemsToSave, cancellationToken: cancellationToken);
+            }
+
             await RefreshBooksAsync();
             await LoadShelvesAsync();
             await LoadVolumesAsync();
 
-            string completionMessage = $"XMLインポートが完了しました。\n書籍: {importedBooks:N0} 冊\nシェルフ: {importedShelves:N0} 件";
+            string completionMessage = $"XMLインポートが完了しました。\n" +
+                $"書籍: {result.ImportedBooks.Count:N0} 冊（既存 {result.SkippedBooks:N0} 冊）\n" +
+                $"シェルフ: {result.ImportedShelves.Count:N0} 件（既存 {result.SkippedShelves:N0} 件）";
             StatusMessage = completionMessage;
             ImportCompletedNotification?.Invoke(completionMessage);
         }

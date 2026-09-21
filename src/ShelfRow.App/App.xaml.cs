@@ -111,7 +111,11 @@ public partial class App : Application
                 new WebView2CloudKitWebAuth(dispatcherQueue));
 
             Log("Creating ViewModels");
-            ImageLoader = new ThumbnailImageLoader(thumbnailStorage, dispatcherQueue);
+            ImageLoader = new ThumbnailImageLoader(
+                thumbnailStorage,
+                dispatcherQueue,
+                repository: repository,
+                distributionRootProvider: () => settingsService.Current.ThumbnailDistributionRoot);
             MainViewModel = new MainViewModel(repository, thumbnailStorage, syncEngine, CloudKitAccount, ImageLoader, dispatcherQueue);
 
             mainWindow.ViewModel = MainViewModel;

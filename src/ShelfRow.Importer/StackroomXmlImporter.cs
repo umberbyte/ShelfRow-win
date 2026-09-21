@@ -16,6 +16,18 @@ public class StackroomImportResult
     public List<Item> ImportedBooks { get; } = new();
     public List<Shelf> ImportedShelves { get; } = new();
     public List<Volume> DiscoveredVolumes { get; } = new();
+    public List<Item> ItemsWithUpdatedShelfMembership { get; } = new();
+    public int SkippedBooks { get; internal set; }
+    public int SkippedShelves { get; internal set; }
+}
+
+public sealed record StackroomImportMergeContext(
+    IReadOnlyCollection<Item> ExistingItems,
+    IReadOnlyCollection<Shelf> ExistingShelves,
+    IReadOnlyCollection<Volume> ExistingVolumes)
+{
+    public static StackroomImportMergeContext Empty { get; } = new(
+        Array.Empty<Item>(), Array.Empty<Shelf>(), Array.Empty<Volume>());
 }
 
 public class StackroomXmlImporter
@@ -25,6 +37,20 @@ public class StackroomXmlImporter
         IProgress<ImportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        return await ImportAsync(
+            xmlStream,
+            StackroomImportMergeContext.Empty,
+            progress,
+            cancellationToken);
+    }
+
+    public async Task<StackroomImportResult> ImportAsync(
+        Stream xmlStream,
+        StackroomImportMergeContext mergeContext,
+        IProgress<ImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mergeContext);
         var result = new StackroomImportResult();
 
         // Parse plist in background task
@@ -42,7 +68,33 @@ public class StackroomXmlImporter
         progress?.Report(new ImportProgress(0, totalBooks, 0, totalShelves));
 
         var volumesCache = new Dictionary<string, Volume>(StringComparer.OrdinalIgnoreCase);
+        foreach (var volume in mergeContext.ExistingVolumes)
+        {
+            if (!string.IsNullOrWhiteSpace(volume.LastKnownPath))
+            {
+                volumesCache[volume.LastKnownPath] = volume;
+            }
+        }
+
+        var existingItemsByLegacyId = new Dictionary<int, Item>();
+        var existingItemsByPath = new Dictionary<string, Item>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in mergeContext.ExistingItems)
+        {
+            if (item.LegacyId.HasValue)
+            {
+                existingItemsByLegacyId[item.LegacyId.Value] = item;
+            }
+            if (!string.IsNullOrWhiteSpace(item.RelativePath))
+            {
+                existingItemsByPath[item.RelativePath] = item;
+            }
+        }
+
+        var existingShelfKeys = new HashSet<(string Title, int Type)>(
+            mergeContext.ExistingShelves.Select(shelf => (shelf.Title, shelf.Type)));
         var importedItemsByLegacyId = new Dictionary<int, Item>();
+        var importedItemIds = new HashSet<Guid>();
+        var membershipUpdates = new HashSet<Guid>();
 
         // 1. Process Books
         int booksProcessed = 0;
@@ -56,6 +108,31 @@ public class StackroomXmlImporter
             string filePath = bookData.TryGetValue("Path", out var pathObj) && pathObj is string sPath ? sPath : string.Empty;
 
             var (volumePath, volumeName, relativePath) = VolumePathResolver.SplitPosixPath(filePath);
+
+            Item? existingItem = null;
+            if (legacyId.HasValue)
+            {
+                existingItemsByLegacyId.TryGetValue(legacyId.Value, out existingItem);
+            }
+            if (existingItem is null && !string.IsNullOrWhiteSpace(relativePath))
+            {
+                existingItemsByPath.TryGetValue(relativePath, out existingItem);
+            }
+
+            if (existingItem is not null)
+            {
+                if (legacyId.HasValue)
+                {
+                    importedItemsByLegacyId[legacyId.Value] = existingItem;
+                }
+                result.SkippedBooks++;
+                booksProcessed++;
+                if (booksProcessed % 100 == 0 || booksProcessed == totalBooks)
+                {
+                    progress?.Report(new ImportProgress(booksProcessed, totalBooks, 0, totalShelves));
+                }
+                continue;
+            }
 
             if (!volumesCache.TryGetValue(volumePath, out var volume))
             {
@@ -91,6 +168,15 @@ public class StackroomXmlImporter
             };
 
             result.ImportedBooks.Add(item);
+            importedItemIds.Add(item.Id);
+            if (legacyId.HasValue)
+            {
+                existingItemsByLegacyId[legacyId.Value] = item;
+            }
+            if (!string.IsNullOrWhiteSpace(relativePath))
+            {
+                existingItemsByPath[relativePath] = item;
+            }
             if (legacyId.HasValue)
             {
                 importedItemsByLegacyId[legacyId.Value] = item;
@@ -114,6 +200,14 @@ public class StackroomXmlImporter
             string title = pData.TryGetValue("Title", out var tObj) && tObj is string sT ? sT : "Unnamed Shelf";
             int icon = pData.TryGetValue("Icon", out var iObj) && iObj is long iL ? (int)iL : 0;
             int type = pData.TryGetValue("Type", out var typeObj) && typeObj is long typL ? (int)typL : 0;
+
+            if (existingShelfKeys.Contains((title, type)))
+            {
+                result.SkippedShelves++;
+                shelvesProcessed++;
+                progress?.Report(new ImportProgress(totalBooks, totalBooks, shelvesProcessed, totalShelves));
+                continue;
+            }
 
             string? conditionsJson = null;
             if (type == 1 && pData.TryGetValue("Conditions", out var condObj) && condObj != null)
@@ -148,12 +242,21 @@ public class StackroomXmlImporter
                     if (itemRef is long legacyId && importedItemsByLegacyId.TryGetValue((int)legacyId, out var matchedItem))
                     {
                         shelf.ItemIds.Add(matchedItem.Id);
-                        matchedItem.ShelfIds.Add(shelf.Id);
+                        if (!matchedItem.ShelfIds.Contains(shelf.Id))
+                        {
+                            matchedItem.ShelfIds.Add(shelf.Id);
+                            if (!importedItemIds.Contains(matchedItem.Id)
+                                && membershipUpdates.Add(matchedItem.Id))
+                            {
+                                result.ItemsWithUpdatedShelfMembership.Add(matchedItem);
+                            }
+                        }
                     }
                 }
             }
 
             result.ImportedShelves.Add(shelf);
+            existingShelfKeys.Add((title, type));
             shelvesProcessed++;
             progress?.Report(new ImportProgress(totalBooks, totalBooks, shelvesProcessed, totalShelves));
         }

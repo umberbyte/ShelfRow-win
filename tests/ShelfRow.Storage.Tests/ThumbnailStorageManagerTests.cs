@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using ShelfRow.Core.Models;
 using ShelfRow.Storage;
 using Xunit;
 
@@ -160,6 +161,82 @@ public class ThumbnailStorageManagerTests : IDisposable
         Assert.True(_manager.HasLocalThumbnail(item1));
         Assert.True(_manager.HasLocalThumbnail(item2));
         Assert.True(_manager.HasLocalThumbnail(item3));
+    }
+
+    [Fact]
+    public async Task SyncAllThumbnailsFromNasAsync_ReplacesStaleVersionAndRecordsState()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");
+        var itemId = Guid.NewGuid();
+        byte[] stale = { 1, 2, 3 };
+        byte[] current = { 4, 5, 6, 7, 8 };
+        await File.WriteAllBytesAsync(_manager.GetLocalThumbnailPath(itemId), stale);
+
+        string nasPath = _manager.GetNasThumbnailPath(nasRoot, itemId);
+        Directory.CreateDirectory(Path.GetDirectoryName(nasPath)!);
+        await File.WriteAllBytesAsync(nasPath, current);
+        var manifest = new ThumbnailDistributionManifest();
+        manifest.SetEntry(itemId, version: 2, bytes: current.Length);
+        await _manager.WriteManifestAsync(nasRoot, manifest);
+
+        var states = new Dictionary<Guid, LocalCoverState>
+        {
+            [itemId] = new() { ItemId = itemId, Version = 1, Bytes = stale.Length }
+        };
+        var result = await _manager.SyncAllThumbnailsFromNasAsync(
+            nasRoot, new[] { itemId }, states);
+
+        Assert.Equal(1, result.Fetched);
+        Assert.Equal(current, await File.ReadAllBytesAsync(_manager.GetLocalThumbnailPath(itemId)));
+        var update = Assert.Single(result.StateUpdates);
+        Assert.Equal(2, update.Version);
+        Assert.Equal(current.Length, update.Bytes);
+        Assert.Equal(0, update.Attempts);
+    }
+
+    [Fact]
+    public async Task SyncAllThumbnailsFromNasAsync_StopsAfterThreeFailuresForSameVersion()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");
+        Directory.CreateDirectory(nasRoot);
+        var itemId = Guid.NewGuid();
+        var manifest = new ThumbnailDistributionManifest();
+        manifest.SetEntry(itemId, version: 4, bytes: 100);
+        await _manager.WriteManifestAsync(nasRoot, manifest);
+        var states = new Dictionary<Guid, LocalCoverState>
+        {
+            [itemId] = new()
+            {
+                ItemId = itemId,
+                Version = 3,
+                Attempts = 3,
+                AttemptedVersion = 4,
+                LastErrorCode = 2
+            }
+        };
+
+        var result = await _manager.SyncAllThumbnailsFromNasAsync(
+            nasRoot, new[] { itemId }, states);
+
+        Assert.Equal(1, result.SuppressedAfterFailures);
+        Assert.Equal(0, result.Failed);
+        Assert.Empty(result.StateUpdates);
+    }
+
+    [Fact]
+    public async Task SyncAllThumbnailsFromNasAsync_DoesNotScanShardsWithoutManifest()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");
+        var itemId = Guid.NewGuid();
+        string nasPath = _manager.GetNasThumbnailPath(nasRoot, itemId);
+        Directory.CreateDirectory(Path.GetDirectoryName(nasPath)!);
+        await File.WriteAllBytesAsync(nasPath, new byte[] { 1, 2, 3 });
+
+        var result = await _manager.SyncAllThumbnailsFromNasAsync(nasRoot);
+
+        Assert.True(result.ManifestMissing);
+        Assert.Equal(0, result.TotalFoundInNas);
+        Assert.False(_manager.HasLocalThumbnail(itemId));
     }
 
     public void Dispose()

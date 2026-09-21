@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using ShelfRow.Core.Models;
 
 namespace ShelfRow.Storage;
 
@@ -317,39 +318,46 @@ public class ThumbnailStorageManager
         int maxConcurrency = 4,
         CancellationToken cancellationToken = default)
     {
+        return await SyncAllThumbnailsFromNasAsync(
+            nasDistributionRoot,
+            libraryItemIds: null,
+            localStates: null,
+            progress,
+            maxConcurrency,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Synchronizes covers by comparing the NAS manifest with this device's local
+    /// bookkeeping. No shard enumeration is used: a missing manifest is not a
+    /// reason to issue tens of thousands of network file-system calls.
+    /// </summary>
+    public async Task<ThumbnailSyncResult> SyncAllThumbnailsFromNasAsync(
+        string nasDistributionRoot,
+        IReadOnlyCollection<Guid>? libraryItemIds,
+        IReadOnlyDictionary<Guid, LocalCoverState>? localStates,
+        IProgress<ThumbnailSyncProgress>? progress = null,
+        int maxConcurrency = 4,
+        CancellationToken cancellationToken = default)
+    {
         var result = new ThumbnailSyncResult();
         if (!Directory.Exists(nasDistributionRoot))
             return result;
 
-        // 1. Gather all candidates to sync
-        var candidates = new List<(Guid ItemId, long ExpectedBytes)>();
-
         var manifest = await ReadManifestAsync(nasDistributionRoot, cancellationToken);
-        if (manifest != null && manifest.Entries.Count > 0)
+        if (manifest is null)
         {
-            foreach (var (key, entry) in manifest.Entries)
-            {
-                if (Guid.TryParse(key, out var itemId))
-                {
-                    candidates.Add((itemId, entry.Bytes));
-                }
-            }
+            result.ManifestMissing = true;
+            return result;
         }
-        else
+
+        HashSet<Guid>? libraryIds = libraryItemIds is null ? null : new HashSet<Guid>(libraryItemIds);
+        var candidates = new List<(Guid ItemId, int Version, long ExpectedBytes)>();
+        foreach (var (key, entry) in manifest.Entries)
         {
-            // Sharded scan fallback: look through 256 subdirectories
-            foreach (var shardDir in Directory.EnumerateDirectories(nasDistributionRoot))
+            if (Guid.TryParse(key, out var itemId) && (libraryIds is null || libraryIds.Contains(itemId)))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                foreach (var file in Directory.EnumerateFiles(shardDir, "*.jpg"))
-                {
-                    string fname = Path.GetFileNameWithoutExtension(file);
-                    if (Guid.TryParse(fname, out var itemId))
-                    {
-                        var info = new FileInfo(file);
-                        candidates.Add((itemId, info.Length));
-                    }
-                }
+                candidates.Add((itemId, entry.Version, entry.Bytes));
             }
         }
 
@@ -357,26 +365,36 @@ public class ThumbnailStorageManager
         if (candidates.Count == 0)
             return result;
 
-        // 2. Filter for items not cached locally or with 0 bytes
-        var missing = new List<(Guid ItemId, long ExpectedBytes)>();
+        // 2. Compare the manifest version with device-local state. A same-sized
+        // file already in cache can be adopted without another network copy.
+        var missing = new List<(Guid ItemId, int Version, long ExpectedBytes)>();
         foreach (var item in candidates)
         {
+            LocalCoverState? state = null;
+            localStates?.TryGetValue(item.ItemId, out state);
             string localPath = GetLocalThumbnailPath(item.ItemId);
-            if (!File.Exists(localPath))
+            long localBytes = File.Exists(localPath) ? new FileInfo(localPath).Length : 0;
+            bool sizeMatches = localBytes > 0 && (item.ExpectedBytes <= 0 || localBytes == item.ExpectedBytes);
+
+            if (state?.Version == item.Version && sizeMatches)
             {
-                missing.Add(item);
+                result.AlreadyCached++;
+            }
+            else if (sizeMatches)
+            {
+                result.AlreadyCached++;
+                result.StateUpdates.Add(CreateSuccessfulState(item.ItemId, item.Version, localBytes));
+            }
+            else if (state is not null
+                     && state.AttemptedVersion == item.Version
+                     && state.Attempts >= 3
+                     && state.LastErrorCode != 0)
+            {
+                result.SuppressedAfterFailures++;
             }
             else
             {
-                var fi = new FileInfo(localPath);
-                if (fi.Length == 0)
-                {
-                    missing.Add(item);
-                }
-                else
-                {
-                    result.AlreadyCached++;
-                }
+                missing.Add(item);
             }
         }
 
@@ -388,6 +406,7 @@ public class ThumbnailStorageManager
         int processedCount = 0;
         int fetchedCount = 0;
         int failedCount = 0;
+        var stateUpdates = new System.Collections.Concurrent.ConcurrentBag<LocalCoverState>();
 
         var tasks = missing.Select(async target =>
         {
@@ -396,22 +415,32 @@ public class ThumbnailStorageManager
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 bool copied = await CopyFromNasDistributionAsync(nasDistributionRoot, target.ItemId, cancellationToken);
-                if (copied)
+                string localPath = GetLocalThumbnailPath(target.ItemId);
+                long bytes = copied && File.Exists(localPath) ? new FileInfo(localPath).Length : 0;
+                bool valid = copied && bytes > 0 && (target.ExpectedBytes <= 0 || bytes == target.ExpectedBytes);
+                if (valid)
                 {
                     Interlocked.Increment(ref fetchedCount);
+                    stateUpdates.Add(CreateSuccessfulState(target.ItemId, target.Version, bytes));
                 }
                 else
                 {
                     Interlocked.Increment(ref failedCount);
+                    LocalCoverState? previous = null;
+                    localStates?.TryGetValue(target.ItemId, out previous);
+                    stateUpdates.Add(CreateFailedState(previous, target.ItemId, target.Version, copied ? 13 : 2));
                 }
             }
             catch (OperationCanceledException)
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
                 Interlocked.Increment(ref failedCount);
+                LocalCoverState? previous = null;
+                localStates?.TryGetValue(target.ItemId, out previous);
+                stateUpdates.Add(CreateFailedState(previous, target.ItemId, target.Version, ex.HResult));
             }
             finally
             {
@@ -429,8 +458,32 @@ public class ThumbnailStorageManager
         await Task.WhenAll(tasks);
         result.Fetched = fetchedCount;
         result.Failed = failedCount;
+        result.StateUpdates.AddRange(stateUpdates);
         return result;
     }
+
+    private static LocalCoverState CreateSuccessfulState(Guid itemId, int version, long bytes) => new()
+    {
+        ItemId = itemId,
+        Version = version,
+        Bytes = bytes,
+        UpdatedAt = DateTime.UtcNow,
+        Attempts = 0,
+        AttemptedVersion = version,
+        LastErrorCode = 0
+    };
+
+    private static LocalCoverState CreateFailedState(LocalCoverState? previous, Guid itemId, int attemptedVersion, int errorCode) => new()
+    {
+        ItemId = itemId,
+        Version = previous?.Version ?? 0,
+        Bytes = previous?.Bytes ?? 0,
+        UpdatedAt = DateTime.UtcNow,
+        PendingUpload = previous?.PendingUpload ?? false,
+        Attempts = previous?.AttemptedVersion == attemptedVersion ? previous.Attempts + 1 : 1,
+        AttemptedVersion = attemptedVersion,
+        LastErrorCode = errorCode == 0 ? -1 : errorCode
+    };
 }
 
 public class ThumbnailSyncProgress
@@ -446,5 +499,8 @@ public class ThumbnailSyncResult
     public int Fetched { get; set; }
     public int AlreadyCached { get; set; }
     public int Failed { get; set; }
+    public int SuppressedAfterFailures { get; set; }
+    public bool ManifestMissing { get; set; }
+    public List<LocalCoverState> StateUpdates { get; } = new();
 }
 

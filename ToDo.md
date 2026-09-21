@@ -10,7 +10,7 @@
 
 ## 優先度A — データを壊す / 機能が成立しない
 
-### [ ] A-1. インポートにマージ戦略が無い（再インポートで蔵書が倍増する）
+### [x] A-1. インポートにマージ戦略が無い（再インポートで蔵書が倍増する）
 
 **最も危険。かつ修正は小さい。**
 
@@ -21,8 +21,10 @@
   「`legacyID` は `LibraryImporter` が挿入前に fetch することで一意に保たれる」と明記。
 - **修正方針**: インポータに既存項目の辞書（`legacyID` → Item、`relativePath` → Item）を渡し、
   ヒットしたらスキップして本棚の関連付けにだけ使う。リポジトリ側に一括取得が要る。
+- **実装済み (2026-09-22)**: `legacyID`、次に `relativePath` で既存書籍を照合し、タイトルと種別が
+  同じ既存棚および既存ボリュームも再利用するよう修正。棚関連を含む一括取得 API と回帰テストを追加。
 
-### [ ] A-2. `CoverVersion` による差分計算が実装されていない（表紙が永久に更新されない）
+### [x] A-2. `CoverVersion` による差分計算が実装されていない（表紙が永久に更新されない）
 
 - **現象**: mac 側で表紙を作り直しても Windows 側は古いまま。ローカルにファイルがあるかしか見ていない。
 - **根拠**: `CoverVersion` は [`ItemViewModel.cs:246`](src/ShelfRow.App/ViewModels/ItemViewModel.cs#L246)
@@ -38,6 +40,9 @@
   - 失敗の記録が無いため、NAS に存在しない本のサムネイルをスクロールのたびに取りに行く
 - **修正方針**: ローカルに `LocalCoverState` 相当のテーブル（ItemId / Version / Bytes / 失敗回数）を持たせ、
   取得判定とスクロール時のフェッチをこれで行う。**この表は端末固有なので iCloud に送らないこと。**
+- **実装済み (2026-09-22)**: 現行mac版に合わせ、NASマニフェストの版と端末固有
+  `LocalCoverStates` を比較する方式を実装。表示時取得にも適用し、同一版の失敗は3回で停止する。
+  マニフェスト不在時の256シャード全走査は廃止した。
 
 ### [ ] A-3. 書影の生成経路が存在しない
 
@@ -116,10 +121,10 @@
 
 ## 優先度E — 個別の軽微なバグ
 
-- [ ] **E-1.** [`ThumbnailImageLoader.cs:100`](src/ShelfRow.App/Services/ThumbnailImageLoader.cs#L100)
+- [x] **E-1.** [`ThumbnailImageLoader.cs:100`](src/ShelfRow.App/Services/ThumbnailImageLoader.cs#L100)
       `TryEnqueue` の戻り値を見ていない。失敗すると `TaskCompletionSource` が永久に完了せず、
       その `await` がハングし `_inFlightTasks` にも残り続ける
-- [ ] **E-2.** 同ファイル `:59` `ConcurrentDictionary.GetOrAdd` のファクトリは同一キーで
+- [x] **E-2.** 同ファイル `:59` `ConcurrentDictionary.GetOrAdd` のファクトリは同一キーで
       複数回実行され得るため、重複ロードが走る可能性がある
 - [ ] **E-3.** [`ApplePlistParser.cs:61`](src/ShelfRow.Importer/ApplePlistParser.cs#L61)
       日付の解析失敗時に `DateTime.UtcNow` を代入している。壊れたデータが

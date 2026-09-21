@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using ShelfRow.Core.Models;
 using ShelfRow.Importer;
 using Xunit;
 
@@ -101,5 +102,53 @@ public class StackroomXmlImporterTests
         Assert.Equal(1, smartShelf.Type);
         Assert.True(smartShelf.IsSmart);
         Assert.NotNull(smartShelf.SmartConditionsJson);
+    }
+
+    [Fact]
+    public async Task ImportAsync_MergesExistingBooksShelvesAndVolumes()
+    {
+        const string sampleXml = @"<?xml version=""1.0"" encoding=""UTF-8""?>
+<plist version=""1.0""><dict>
+<key>Books</key><dict>
+  <key>101</key><dict><key>ID</key><integer>101</integer><key>Title</key><string>Legacy match</string><key>Path</key><string>/Volumes/Books/Changed.zip</string></dict>
+  <key>202</key><dict><key>ID</key><integer>202</integer><key>Title</key><string>Path match</string><key>Path</key><string>/Volumes/Books/SciFi/Second.zip</string></dict>
+  <key>303</key><dict><key>ID</key><integer>303</integer><key>Title</key><string>New book</string><key>Path</key><string>/Volumes/Books/SciFi/Third.zip</string></dict>
+</dict>
+<key>Playlists</key><array>
+  <dict><key>Title</key><string>Favorites</string><key>Type</key><integer>0</integer></dict>
+  <dict><key>Title</key><string>New collection</string><key>Type</key><integer>0</integer><key>Items</key><array><integer>101</integer><integer>202</integer><integer>303</integer></array></dict>
+</array>
+</dict></plist>";
+
+        var volume = new Volume { Name = "Books", LastKnownPath = "/Volumes/Books" };
+        var legacyMatch = new Item { LegacyId = 101, RelativePath = "Original.zip", Title = "Existing legacy item", VolumeId = volume.Id };
+        var pathMatch = new Item { RelativePath = "SciFi/Second.zip", Title = "Existing path item", VolumeId = volume.Id };
+        var existingShelf = new Shelf { Title = "Favorites", Type = 0 };
+        var context = new StackroomImportMergeContext(
+            new[] { legacyMatch, pathMatch },
+            new[] { existingShelf },
+            new[] { volume });
+
+        var importer = new StackroomXmlImporter();
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sampleXml));
+        var result = await importer.ImportAsync(stream, context);
+
+        var importedBook = Assert.Single(result.ImportedBooks);
+        Assert.Equal(303, importedBook.LegacyId);
+        Assert.Equal(volume.Id, importedBook.VolumeId);
+        Assert.Equal(2, result.SkippedBooks);
+        Assert.Empty(result.DiscoveredVolumes);
+
+        var importedShelf = Assert.Single(result.ImportedShelves);
+        Assert.Equal("New collection", importedShelf.Title);
+        Assert.Equal(1, result.SkippedShelves);
+        Assert.Equal(3, importedShelf.ItemIds.Count);
+        Assert.Contains(legacyMatch.Id, importedShelf.ItemIds);
+        Assert.Contains(pathMatch.Id, importedShelf.ItemIds);
+        Assert.Contains(importedBook.Id, importedShelf.ItemIds);
+
+        Assert.Equal(2, result.ItemsWithUpdatedShelfMembership.Count);
+        Assert.Contains(importedShelf.Id, legacyMatch.ShelfIds);
+        Assert.Contains(importedShelf.Id, pathMatch.ShelfIds);
     }
 }

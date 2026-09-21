@@ -108,6 +108,69 @@ public class SqliteShelfRowRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetItemsForImportMerge_LoadsAllItemsAndShelfMemberships()
+    {
+        await _repository.InitializeAsync();
+
+        var shelf = new Shelf { Title = "Imported shelf", Type = 0 };
+        await _repository.UpsertShelfAsync(shelf);
+
+        var first = new Item
+        {
+            LegacyId = 101,
+            Title = "First",
+            RelativePath = "first.zip",
+            ShelfIds = { shelf.Id }
+        };
+        var second = new Item
+        {
+            LegacyId = 202,
+            Title = "Second",
+            RelativePath = "second.zip"
+        };
+        await _repository.UpsertItemsBatchAsync(new[] { first, second });
+
+        var items = await _repository.GetItemsForImportMergeAsync();
+
+        Assert.Equal(2, items.Count);
+        Assert.Contains(items, item => item.Id == first.Id && item.ShelfIds.SequenceEqual(new[] { shelf.Id }));
+        Assert.Contains(items, item => item.Id == second.Id && item.ShelfIds.Count == 0);
+    }
+
+    [Fact]
+    public async Task LocalCoverStates_RoundTripWithoutEnteringCloudUploadQueue()
+    {
+        await _repository.InitializeAsync();
+        var itemId = Guid.NewGuid();
+        var state = new LocalCoverState
+        {
+            ItemId = itemId,
+            Version = 7,
+            Bytes = 12345,
+            PendingUpload = true,
+            Attempts = 2,
+            AttemptedVersion = 8,
+            LastErrorCode = 53
+        };
+
+        await _repository.UpsertLocalCoverStatesAsync(new[] { state });
+
+        var loaded = await _repository.GetLocalCoverStateAsync(itemId);
+        Assert.NotNull(loaded);
+        Assert.Equal(7, loaded.Version);
+        Assert.Equal(12345, loaded.Bytes);
+        Assert.True(loaded.PendingUpload);
+        Assert.Equal(2, loaded.Attempts);
+        Assert.Equal(8, loaded.AttemptedVersion);
+        Assert.Equal(53, loaded.LastErrorCode);
+
+        var pending = await _repository.GetPendingUploadsAsync();
+        Assert.Empty(pending.Items);
+        Assert.Empty(pending.Shelves);
+        Assert.Empty(pending.Volumes);
+    }
+
+    [Fact]
     public async Task SyncMetadata_CanStoreAndRetrieve()
     {
         await _repository.InitializeAsync();

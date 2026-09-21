@@ -126,6 +126,19 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 Value TEXT
             );
 
+            -- Device-local cover bookkeeping. Deliberately has no PendingUpload
+            -- integration: these rows must never reach CloudKit.
+            CREATE TABLE IF NOT EXISTS LocalCoverStates (
+                ItemId TEXT PRIMARY KEY,
+                Version INTEGER NOT NULL DEFAULT 0,
+                Bytes INTEGER NOT NULL DEFAULT 0,
+                UpdatedAt TEXT NOT NULL,
+                PendingUpload INTEGER NOT NULL DEFAULT 0,
+                Attempts INTEGER NOT NULL DEFAULT 0,
+                AttemptedVersion INTEGER NOT NULL DEFAULT 0,
+                LastErrorCode INTEGER NOT NULL DEFAULT 0
+            );
+
             CREATE INDEX IF NOT EXISTS IX_Items_Title ON Items(Title);
             CREATE INDEX IF NOT EXISTS IX_Items_Author ON Items(Author);
             CREATE INDEX IF NOT EXISTS IX_Items_Rating ON Items(Rating);
@@ -211,6 +224,42 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             return item;
         }
         return null;
+    }
+
+    public async Task<IReadOnlyList<Item>> GetItemsForImportMergeAsync(CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        var items = new List<Item>();
+        var itemsById = new Dictionary<Guid, Item>();
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT * FROM Items";
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var item = MapItem(reader);
+                items.Add(item);
+                itemsById[item.Id] = item;
+            }
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT ItemId, ShelfId FROM ItemShelves";
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (Guid.TryParse(reader.GetString(0), out var itemId)
+                    && Guid.TryParse(reader.GetString(1), out var shelfId)
+                    && itemsById.TryGetValue(itemId, out var item))
+                {
+                    item.ShelfIds.Add(shelfId);
+                }
+            }
+        }
+
+        return items;
     }
 
     public async Task<IReadOnlyList<Item>> GetItemsAsync(int skip = 0, int take = 100, Guid? shelfId = null, string? search = null, CancellationToken cancellationToken = default)
@@ -442,6 +491,91 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         cmd.CommandText = "DELETE FROM Items WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", id.ToString("D"));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetAllItemIdsAsync(CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id FROM Items";
+
+        var ids = new List<Guid>();
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (Guid.TryParse(reader.GetString(0), out var id))
+                ids.Add(id);
+        }
+        return ids;
+    }
+
+    public async Task<IReadOnlyList<LocalCoverState>> GetLocalCoverStatesAsync(CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM LocalCoverStates";
+
+        var states = new List<LocalCoverState>();
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            states.Add(MapLocalCoverState(reader));
+        return states;
+    }
+
+    public async Task<LocalCoverState?> GetLocalCoverStateAsync(Guid itemId, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM LocalCoverStates WHERE ItemId = @ItemId LIMIT 1";
+        cmd.Parameters.AddWithValue("@ItemId", itemId.ToString("D"));
+
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? MapLocalCoverState(reader) : null;
+    }
+
+    public async Task UpsertLocalCoverStatesAsync(IEnumerable<LocalCoverState> states, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+            INSERT INTO LocalCoverStates
+                (ItemId, Version, Bytes, UpdatedAt, PendingUpload, Attempts, AttemptedVersion, LastErrorCode)
+            VALUES
+                (@ItemId, @Version, @Bytes, @UpdatedAt, @PendingUpload, @Attempts, @AttemptedVersion, @LastErrorCode)
+            ON CONFLICT(ItemId) DO UPDATE SET
+                Version = excluded.Version,
+                Bytes = excluded.Bytes,
+                UpdatedAt = excluded.UpdatedAt,
+                PendingUpload = excluded.PendingUpload,
+                Attempts = excluded.Attempts,
+                AttemptedVersion = excluded.AttemptedVersion,
+                LastErrorCode = excluded.LastErrorCode;";
+
+        var itemId = cmd.Parameters.Add("@ItemId", SqliteType.Text);
+        var version = cmd.Parameters.Add("@Version", SqliteType.Integer);
+        var bytes = cmd.Parameters.Add("@Bytes", SqliteType.Integer);
+        var updatedAt = cmd.Parameters.Add("@UpdatedAt", SqliteType.Text);
+        var pendingUpload = cmd.Parameters.Add("@PendingUpload", SqliteType.Integer);
+        var attempts = cmd.Parameters.Add("@Attempts", SqliteType.Integer);
+        var attemptedVersion = cmd.Parameters.Add("@AttemptedVersion", SqliteType.Integer);
+        var lastErrorCode = cmd.Parameters.Add("@LastErrorCode", SqliteType.Integer);
+
+        foreach (var state in states)
+        {
+            itemId.Value = state.ItemId.ToString("D");
+            version.Value = state.Version;
+            bytes.Value = state.Bytes;
+            updatedAt.Value = state.UpdatedAt.ToString("O");
+            pendingUpload.Value = state.PendingUpload ? 1 : 0;
+            attempts.Value = state.Attempts;
+            attemptedVersion.Value = state.AttemptedVersion;
+            lastErrorCode.Value = state.LastErrorCode;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Shelf>> GetShelvesAsync(CancellationToken cancellationToken = default)
@@ -677,6 +811,18 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         WindowsMountPath = reader.IsDBNull(reader.GetOrdinal("WindowsMountPath")) ? null : reader.GetString(reader.GetOrdinal("WindowsMountPath")),
         CloudKitRecordName = reader.IsDBNull(reader.GetOrdinal("CloudKitRecordName")) ? null : reader.GetString(reader.GetOrdinal("CloudKitRecordName")),
         CloudKitChangeTag = reader.IsDBNull(reader.GetOrdinal("CloudKitChangeTag")) ? null : reader.GetString(reader.GetOrdinal("CloudKitChangeTag"))
+    };
+
+    private static LocalCoverState MapLocalCoverState(DbDataReader reader) => new()
+    {
+        ItemId = Guid.Parse(reader.GetString(reader.GetOrdinal("ItemId"))),
+        Version = reader.GetInt32(reader.GetOrdinal("Version")),
+        Bytes = reader.GetInt64(reader.GetOrdinal("Bytes")),
+        UpdatedAt = DateTime.Parse(reader.GetString(reader.GetOrdinal("UpdatedAt")), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        PendingUpload = reader.GetInt32(reader.GetOrdinal("PendingUpload")) != 0,
+        Attempts = reader.GetInt32(reader.GetOrdinal("Attempts")),
+        AttemptedVersion = reader.GetInt32(reader.GetOrdinal("AttemptedVersion")),
+        LastErrorCode = reader.GetInt32(reader.GetOrdinal("LastErrorCode"))
     };
 
     /// <summary>
