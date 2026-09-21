@@ -46,9 +46,32 @@
 ## 4. 現在の実装状況と次のステップ
 * **完了済み**:
   * 全 5 プロジェクトのコアロジック実装（Core, Data, CloudKit, Importer, Storage）
-  * 全 18 件の単体テスト（100% 合格）
-  * 初期 Git コミット完了
+  * 全 24 件の単体テスト（100% 合格）
+  * macOS 版 UI の完全移植（`ContentView.swift` に準拠した 3 ペイン構成：サイドバー、中央グリッド/リスト＋フィルターバー、詳細インスペクター）
+  * macOS 版設定画面の完全移植（`PreferencesView.swift` に準拠した 8 タブ設定：一般、ビューア、ヘルパー、キーワード、カスタマイズ、iCloud、セキュリティ、保守）
+  * `AppSettings` モデル、JSON 永続化サービス（`AppSettingsService`）、および ViewModel バインディングの実装
+  * Windows 実機での WinUI 3 アプリ起動・ビルド検証（`ShelfRow.App` 起動、SQLite 初期化、ウィンドウ表示確認）
+  * VS Code / Antigravity IDE での実行・デバッグ構成整備（`launch.json`, `tasks.json`, `run.ps1`）
 * **次のタスク**:
-  * Windows 実機での WinUI 3 アプリ起動・ビルド検証
-  * サムネイル画像非同期ロード用の ImageSource 変換コンバーターの実装
+  * サムネイル画像非同期ロード用のキャッシュ・パイプライン最適化
   * Windows 資格情報マネージャー（Credential Locker / DPAPI）による Apple ID WebAuth トークンのセキュア保管
+
+---
+
+## 5. 重要な知見・トラブルシューティング
+* **着手前に必ず読むこと**:
+  * [`ANTIGRAVITY_CODE_ANALYSIS.md`](file:///c:/Users/gsuga/src/ShelfRow-win/ANTIGRAVITY_CODE_ANALYSIS.md)
+  * 継承コードで実際に破綻していた6つの傾向（外部契約の未検証、難所の欠落、エラーの不可視、実規模未検証、
+    WinUI 3 固有挙動の取り違え、部品の未配線）と、再発を防ぐチェックリスト、未検証領域の予測がある。
+  * このプロジェクトには「テストが全件通る」「部品が揃っている」が動作を全く保証しなかった前例がある。
+* **WinUI 3 Window と Converter**:
+  * WinUI 3 の `Window` は `FrameworkElement` ではないため、Window レベルで `{x:Bind ..., Converter={StaticResource ...}}` を使用すると `CS1503` エラーになる。Converter ではなく ViewModel 側に直接プロパティ（`Brush`, `Visibility` 等）を設ける。
+* **未定義 StaticResource による実行時例外**:
+  * 未定義の XAML リソースはビルド時ではなく起動時の `InitializeComponent()` で `XamlParseException` を引き起こす。必ずインラインスタイルまたは `App.xaml` で定義されていることを確認する。
+* **対話型セッションと仮想デスクトップ**:
+  * エージェント環境（分離デスクトップ）からユーザーの画面（`Default` デスクトップ）へウィンドウを表示させるには、`schtasks /create ... /it` による対話型起動を用いる。
+* **詳細な開発履歴・振り返り**:
+  * 成功要因・失敗過程の詳細は [`PROJECT_REPORT.md`](file:///c:/Users/gsuga/src/ShelfRow-win/PROJECT_REPORT.md) を参照。
+
+
+
