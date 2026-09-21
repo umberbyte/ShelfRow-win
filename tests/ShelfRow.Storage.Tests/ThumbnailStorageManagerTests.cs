@@ -196,6 +196,34 @@ public class ThumbnailStorageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAllThumbnailsFromNasAsync_ReplacesStaleVersionWithSameByteLength()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");
+        var itemId = Guid.NewGuid();
+        byte[] stale = { 1, 2, 3, 4 };
+        byte[] current = { 5, 6, 7, 8 };
+        await File.WriteAllBytesAsync(_manager.GetLocalThumbnailPath(itemId), stale);
+
+        string nasPath = _manager.GetNasThumbnailPath(nasRoot, itemId);
+        Directory.CreateDirectory(Path.GetDirectoryName(nasPath)!);
+        await File.WriteAllBytesAsync(nasPath, current);
+        var manifest = new ThumbnailDistributionManifest();
+        manifest.SetEntry(itemId, version: 2, bytes: current.Length);
+        await _manager.WriteManifestAsync(nasRoot, manifest);
+        var states = new Dictionary<Guid, LocalCoverState>
+        {
+            [itemId] = new() { ItemId = itemId, Version = 1, Bytes = stale.Length }
+        };
+
+        var result = await _manager.SyncAllThumbnailsFromNasAsync(
+            nasRoot, new[] { itemId }, states);
+
+        Assert.Equal(1, result.Fetched);
+        Assert.Equal(current, await File.ReadAllBytesAsync(_manager.GetLocalThumbnailPath(itemId)));
+        Assert.Equal(2, Assert.Single(result.StateUpdates).Version);
+    }
+
+    [Fact]
     public async Task SyncAllThumbnailsFromNasAsync_StopsAfterThreeFailuresForSameVersion()
     {
         string nasRoot = Path.Combine(_tempDir, "NAS", "ShelfRowThumbnails");

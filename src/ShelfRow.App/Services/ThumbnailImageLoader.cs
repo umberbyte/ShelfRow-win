@@ -116,7 +116,10 @@ public class ThumbnailImageLoader
 
             if (state?.Version != target.Version || !sizeMatches)
             {
-                if (sizeMatches)
+                // Size is useful only when adopting an untracked cache left by an
+                // older build. Once a version has been recorded, a different version
+                // must be copied even when both JPEGs happen to have the same length.
+                if (state is null && sizeMatches)
                 {
                     await RecordSuccessAsync(itemId, target.Version, localBytes, cancellationToken);
                 }

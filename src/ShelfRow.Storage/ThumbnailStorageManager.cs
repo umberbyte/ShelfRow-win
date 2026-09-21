@@ -380,7 +380,7 @@ public class ThumbnailStorageManager
             {
                 result.AlreadyCached++;
             }
-            else if (sizeMatches)
+            else if (state is null && sizeMatches)
             {
                 result.AlreadyCached++;
                 result.StateUpdates.Add(CreateSuccessfulState(item.ItemId, item.Version, localBytes));
