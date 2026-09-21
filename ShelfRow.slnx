@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShelfRow.App/ShelfRow.App.csproj">
+      <Platform Project="x86" />
+    </Project>
+    <Project Path="src/ShelfRow.CloudKit/ShelfRow.CloudKit.csproj" />
+    <Project Path="src/ShelfRow.Core/ShelfRow.Core.csproj" />
+    <Project Path="src/ShelfRow.Data/ShelfRow.Data.csproj" />
+    <Project Path="src/ShelfRow.Importer/ShelfRow.Importer.csproj" />
+    <Project Path="src/ShelfRow.Storage/ShelfRow.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShelfRow.CloudKit.Tests/ShelfRow.CloudKit.Tests.csproj" />
+    <Project Path="tests/ShelfRow.Core.Tests/ShelfRow.Core.Tests.csproj" />
+    <Project Path="tests/ShelfRow.Data.Tests/ShelfRow.Data.Tests.csproj" />
+    <Project Path="tests/ShelfRow.Importer.Tests/ShelfRow.Importer.Tests.csproj" />
+    <Project Path="tests/ShelfRow.Storage.Tests/ShelfRow.Storage.Tests.csproj" />
+  </Folder>
+</Solution>
