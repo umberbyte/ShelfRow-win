@@ -117,6 +117,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 ItemId TEXT NOT NULL,
                 ShelfId TEXT NOT NULL,
                 CloudKitRecordName TEXT,
+                PendingOperation INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (ItemId, ShelfId),
                 FOREIGN KEY (ItemId) REFERENCES Items(Id) ON DELETE CASCADE,
                 FOREIGN KEY (ShelfId) REFERENCES Shelves(Id) ON DELETE CASCADE
@@ -155,6 +156,14 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         await AddMissingColumnsAsync(conn, cancellationToken);
+
+        // Rows created by older Windows builds had no upload marker. A link with
+        // no CloudKit identity can only be local, so queue it once endpoints exist.
+        using var queueLegacyLinks = conn.CreateCommand();
+        queueLegacyLinks.CommandText = @"
+            UPDATE ItemShelves SET PendingOperation = 1
+            WHERE CloudKitRecordName IS NULL AND PendingOperation = 0";
+        await queueLegacyLinks.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -175,7 +184,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             ("Items", "CloudKitRecordName", "TEXT"),
             ("Items", "CloudKitChangeTag", "TEXT"),
             ("Items", "PendingUpload", "INTEGER NOT NULL DEFAULT 0"),
-            ("ItemShelves", "CloudKitRecordName", "TEXT")
+            ("ItemShelves", "CloudKitRecordName", "TEXT"),
+            ("ItemShelves", "PendingOperation", "INTEGER NOT NULL DEFAULT 0")
         ];
 
         foreach (var (table, column, type) in required)
@@ -247,7 +257,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT ItemId, ShelfId FROM ItemShelves";
+            cmd.CommandText = "SELECT ItemId, ShelfId FROM ItemShelves WHERE PendingOperation <> 2";
             using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
@@ -281,7 +291,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         }
         else if (shelfId.HasValue)
         {
-            query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId";
+            query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId AND s.PendingOperation <> 2";
             cmd.Parameters.AddWithValue("@ShelfId", shelfId.Value.ToString("D"));
         }
         else
@@ -326,7 +336,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         }
         else if (shelfId.HasValue)
         {
-            query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId";
+            query += " INNER JOIN ItemShelves s ON i.Id = s.ItemId WHERE s.ShelfId = @ShelfId AND s.PendingOperation <> 2";
             cmd.Parameters.AddWithValue("@ShelfId", shelfId.Value.ToString("D"));
         }
         else
@@ -426,17 +436,6 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         var pCkt = cmdItem.Parameters.Add("@CloudKitChangeTag", SqliteType.Text);
         cmdItem.Parameters.AddWithValue("@PendingUpload", markPendingUpload ? 1 : 0);
 
-        using var cmdDeleteShelves = conn.CreateCommand();
-        cmdDeleteShelves.Transaction = tx;
-        cmdDeleteShelves.CommandText = "DELETE FROM ItemShelves WHERE ItemId = @ItemId";
-        var pDelItemId = cmdDeleteShelves.Parameters.Add("@ItemId", SqliteType.Text);
-
-        using var cmdInsertShelf = conn.CreateCommand();
-        cmdInsertShelf.Transaction = tx;
-        cmdInsertShelf.CommandText = "INSERT OR IGNORE INTO ItemShelves (ItemId, ShelfId) VALUES (@ItemId, @ShelfId)";
-        var pInsItemId = cmdInsertShelf.Parameters.Add("@ItemId", SqliteType.Text);
-        var pInsShelfId = cmdInsertShelf.Parameters.Add("@ShelfId", SqliteType.Text);
-
         foreach (var item in items)
         {
             string itemIdStr = item.Id.ToString("D");
@@ -468,18 +467,8 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
             await cmdItem.ExecuteNonQueryAsync(cancellationToken);
 
-            if (item.ShelfIds != null && item.ShelfIds.Count > 0)
-            {
-                pDelItemId.Value = itemIdStr;
-                await cmdDeleteShelves.ExecuteNonQueryAsync(cancellationToken);
-
-                pInsItemId.Value = itemIdStr;
-                foreach (var sId in item.ShelfIds)
-                {
-                    pInsShelfId.Value = sId.ToString("D");
-                    await cmdInsertShelf.ExecuteNonQueryAsync(cancellationToken);
-                }
-            }
+            if (markPendingUpload)
+                await ReconcileItemShelvesAsync(conn, tx, item, cancellationToken);
         }
 
         await tx.CommitAsync(cancellationToken);
@@ -577,6 +566,56 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         }
 
         await tx.CommitAsync(cancellationToken);
+    }
+
+    private static async Task ReconcileItemShelvesAsync(
+        SqliteConnection conn,
+        SqliteTransaction tx,
+        Item item,
+        CancellationToken cancellationToken)
+    {
+        var existing = new Dictionary<Guid, string?>();
+        using (var query = conn.CreateCommand())
+        {
+            query.Transaction = tx;
+            query.CommandText = "SELECT ShelfId, CloudKitRecordName FROM ItemShelves WHERE ItemId = @ItemId";
+            query.Parameters.AddWithValue("@ItemId", item.Id.ToString("D"));
+            using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                existing[Guid.Parse(reader.GetString(0))] = reader.IsDBNull(1) ? null : reader.GetString(1);
+        }
+
+        var desired = new HashSet<Guid>(item.ShelfIds ?? new List<Guid>());
+        foreach (var (shelfId, recordName) in existing)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            if (desired.Contains(shelfId))
+            {
+                cmd.CommandText = "UPDATE ItemShelves SET PendingOperation = 0 WHERE ItemId = @ItemId AND ShelfId = @ShelfId AND PendingOperation = 2";
+            }
+            else if (recordName is null)
+            {
+                cmd.CommandText = "DELETE FROM ItemShelves WHERE ItemId = @ItemId AND ShelfId = @ShelfId";
+            }
+            else
+            {
+                cmd.CommandText = "UPDATE ItemShelves SET PendingOperation = 2 WHERE ItemId = @ItemId AND ShelfId = @ShelfId";
+            }
+            cmd.Parameters.AddWithValue("@ItemId", item.Id.ToString("D"));
+            cmd.Parameters.AddWithValue("@ShelfId", shelfId.ToString("D"));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (var shelfId in desired.Where(id => !existing.ContainsKey(id)))
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO ItemShelves (ItemId, ShelfId, PendingOperation) VALUES (@ItemId, @ShelfId, 1)";
+            cmd.Parameters.AddWithValue("@ItemId", item.Id.ToString("D"));
+            cmd.Parameters.AddWithValue("@ShelfId", shelfId.ToString("D"));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task<IReadOnlyList<Shelf>> GetShelvesAsync(CancellationToken cancellationToken = default)
@@ -746,7 +785,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT ShelfId FROM ItemShelves WHERE ItemId = @ItemId";
+        cmd.CommandText = "SELECT ShelfId FROM ItemShelves WHERE ItemId = @ItemId AND PendingOperation <> 2";
         cmd.Parameters.AddWithValue("@ItemId", itemId.ToString("D"));
 
         var list = new List<Guid>();
@@ -913,11 +952,15 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = @"
-            INSERT OR IGNORE INTO ItemShelves (ItemId, ShelfId, CloudKitRecordName)
+            INSERT INTO ItemShelves (ItemId, ShelfId, CloudKitRecordName, PendingOperation)
             SELECT i.Id, s.Id, @RecordName
+                 , 0
             FROM Items i, Shelves s
             WHERE i.CloudKitRecordName = @ItemRecordName
-              AND s.CloudKitRecordName = @ShelfRecordName;
+              AND s.CloudKitRecordName = @ShelfRecordName
+            ON CONFLICT(ItemId, ShelfId) DO UPDATE SET
+                CloudKitRecordName = excluded.CloudKitRecordName,
+                PendingOperation = CASE WHEN ItemShelves.PendingOperation = 2 THEN 2 ELSE 0 END;
         ";
         var pRecord = cmd.Parameters.Add("@RecordName", SqliteType.Text);
         var pItem = cmd.Parameters.Add("@ItemRecordName", SqliteType.Text);
@@ -992,7 +1035,34 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 volumes.Add(MapVolume(reader));
         }
 
-        return new PendingUploads(items, shelves, volumes);
+        var itemShelfChanges = new List<PendingItemShelfChange>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"
+                SELECT x.ItemId, x.ShelfId, x.CloudKitRecordName,
+                       i.CloudKitRecordName, s.CloudKitRecordName, x.PendingOperation
+                FROM ItemShelves x
+                JOIN Items i ON i.Id = x.ItemId
+                JOIN Shelves s ON s.Id = x.ShelfId
+                WHERE x.PendingOperation <> 0
+                  AND i.CloudKitRecordName IS NOT NULL
+                  AND s.CloudKitRecordName IS NOT NULL
+                LIMIT @Limit";
+            cmd.Parameters.AddWithValue("@Limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                itemShelfChanges.Add(new PendingItemShelfChange(
+                    Guid.Parse(reader.GetString(0)),
+                    Guid.Parse(reader.GetString(1)),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.GetInt32(5) == 2));
+            }
+        }
+
+        return new PendingUploads(items, shelves, volumes, itemShelfChanges);
     }
 
     /// <summary>
@@ -1018,6 +1088,25 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task ConfirmItemShelfUploadedAsync(
+        Guid itemId,
+        Guid shelfId,
+        string recordName,
+        bool wasDelete,
+        CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = wasDelete
+            ? "DELETE FROM ItemShelves WHERE ItemId = @ItemId AND ShelfId = @ShelfId"
+            : @"UPDATE ItemShelves SET CloudKitRecordName = @RecordName, PendingOperation = 0
+                WHERE ItemId = @ItemId AND ShelfId = @ShelfId";
+        cmd.Parameters.AddWithValue("@ItemId", itemId.ToString("D"));
+        cmd.Parameters.AddWithValue("@ShelfId", shelfId.ToString("D"));
+        cmd.Parameters.AddWithValue("@RecordName", recordName);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Queues every row for upload, for the "resend everything" repair in Preferences.
     /// </summary>
@@ -1030,6 +1119,9 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             cmd.CommandText = $"UPDATE {table} SET PendingUpload = 1";
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
+        using var links = conn.CreateCommand();
+        links.CommandText = "UPDATE ItemShelves SET PendingOperation = 1 WHERE CloudKitRecordName IS NULL";
+        await links.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

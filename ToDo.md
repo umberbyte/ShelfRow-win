@@ -91,7 +91,7 @@
 - **実装済み (2026-09-22)**: インポート保存順をボリューム→本棚→書籍へ変更済み。接続初期化時に
   `PRAGMA foreign_keys = ON` を有効化し、テストDBで既存経路を検証した。
 
-### [ ] B-3. 本棚メンバーシップを iCloud へ送信していない
+### [ ] B-3. 本棚メンバーシップを iCloud へ送信していない（実CloudKit往復確認待ち）
 
 - **現象**: Windows で本を棚に入れても mac に反映されない。受信側は実装済みなので逆方向は動く。
 - **根拠**: `CloudKitSyncEngine.SyncUpAsync` は Item / Shelf / Volume のみ送る。
@@ -101,6 +101,8 @@
 - **修正方針**: 追加・削除を追跡する必要がある（`ItemShelves` に PendingUpload 相当の列）。
   新規リンクは CDMR レコードを create、削除は保存済みの `CloudKitRecordName` で delete。
   **実データで往復を確認するまで完了としないこと。**
+- **実装済み・検証待ち (2026-09-22)**: `ItemShelves.PendingOperation` で追加・削除を保持し、CDMR
+  create/deleteを `records/modify` に含める経路と確認処理を実装。単体往復テスト済み。
 
 ---
 

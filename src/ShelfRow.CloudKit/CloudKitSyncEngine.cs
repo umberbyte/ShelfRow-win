@@ -44,22 +44,45 @@ public class CloudKitSyncEngine
                 break;
 
             var owners = new Dictionary<string, (string Table, Guid Id)>(StringComparer.Ordinal);
+            var linkOwners = new Dictionary<string, PendingItemShelfChange>(StringComparer.Ordinal);
             var request = new CKModifyRecordsRequest();
 
             foreach (var item in pending.Items)
+            {
+                if (request.Operations.Count >= ModifyBatchSize) break;
                 AddOperation(request, owners, CloudKitMapper.ToCKRecord(item), "Items", item.Id);
+            }
 
             foreach (var shelf in pending.Shelves)
+            {
+                if (request.Operations.Count >= ModifyBatchSize) break;
                 AddOperation(request, owners, CloudKitMapper.ToCKRecord(shelf), "Shelves", shelf.Id);
+            }
 
             foreach (var volume in pending.Volumes)
+            {
+                if (request.Operations.Count >= ModifyBatchSize) break;
                 AddOperation(request, owners, CloudKitMapper.ToCKRecord(volume), "Volumes", volume.Id);
+            }
+
+            foreach (var link in pending.ItemShelfChanges)
+            {
+                if (request.Operations.Count >= ModifyBatchSize) break;
+                var record = CloudKitMapper.ToCKRecord(link);
+                request.Operations.Add(new CKRecordOperation
+                {
+                    OperationType = link.IsDelete ? "delete" : "create",
+                    Record = record
+                });
+                linkOwners[record.RecordName] = link;
+            }
 
             var response = await _client.ModifyRecordsAsync(request, cancellationToken);
 
             foreach (var record in response.Records ?? new List<CKRecord>())
             {
-                if (!owners.TryGetValue(record.RecordName, out var owner))
+                if (!owners.TryGetValue(record.RecordName, out var owner)
+                    && !linkOwners.ContainsKey(record.RecordName))
                     continue;
 
                 if (record.ServerErrorCode != null)
@@ -71,7 +94,16 @@ public class CloudKitSyncEngine
                     continue;
                 }
 
-                await _repository.ConfirmUploadedAsync(owner.Table, owner.Id, record.RecordName, record.RecordChangeTag, cancellationToken);
+                if (linkOwners.TryGetValue(record.RecordName, out var linkOwner))
+                {
+                    await _repository.ConfirmItemShelfUploadedAsync(
+                        linkOwner.ItemId, linkOwner.ShelfId, record.RecordName,
+                        linkOwner.IsDelete, cancellationToken);
+                }
+                else
+                {
+                    await _repository.ConfirmUploadedAsync(owner.Table, owner.Id, record.RecordName, record.RecordChangeTag, cancellationToken);
+                }
                 uploaded++;
             }
 

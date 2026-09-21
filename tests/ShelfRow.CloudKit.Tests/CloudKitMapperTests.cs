@@ -9,6 +9,19 @@ namespace ShelfRow.CloudKit.Tests;
 public class CloudKitMapperTests
 {
     [Fact]
+    public void ItemShelfChange_MapsToCoreDataJoinRecord()
+    {
+        var change = new PendingItemShelfChange(
+            Guid.NewGuid(), Guid.NewGuid(), null, "ITEM-RECORD", "SHELF-RECORD", false);
+
+        var record = CloudKitMapper.ToCKRecord(change);
+
+        Assert.Equal(CloudKitMapper.ManyToManyRecordType, record.RecordType);
+        Assert.Equal("Item:Shelf", record.Fields["CD_entityNames"].Value);
+        Assert.Equal("ITEM-RECORD:SHELF-RECORD", record.Fields["CD_recordNames"].Value);
+        Assert.Equal("shelves:items", record.Fields["CD_relationships"].Value);
+    }
+    [Fact]
     public void Item_ToCKRecord_And_Back_MaintainsData()
     {
         var item = new Item

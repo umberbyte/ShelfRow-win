@@ -8,7 +8,8 @@ namespace ShelfRow.Core.Models;
 public record PendingUploads(
     IReadOnlyList<Item> Items,
     IReadOnlyList<Shelf> Shelves,
-    IReadOnlyList<Volume> Volumes)
+    IReadOnlyList<Volume> Volumes,
+    IReadOnlyList<PendingItemShelfChange> ItemShelfChanges)
 {
-    public int Count => Items.Count + Shelves.Count + Volumes.Count;
+    public int Count => Items.Count + Shelves.Count + Volumes.Count + ItemShelfChanges.Count;
 }

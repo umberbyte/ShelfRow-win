@@ -53,6 +53,7 @@ public interface IShelfRowRepository
     Task<PendingUploads> GetPendingUploadsAsync(int limit = 200, CancellationToken cancellationToken = default);
 
     Task ConfirmUploadedAsync(string table, Guid id, string recordName, string? changeTag, CancellationToken cancellationToken = default);
+    Task ConfirmItemShelfUploadedAsync(Guid itemId, Guid shelfId, string recordName, bool wasDelete, CancellationToken cancellationToken = default);
 
     Task MarkAllPendingUploadAsync(CancellationToken cancellationToken = default);
 }

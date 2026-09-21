@@ -266,4 +266,17 @@ public static class CloudKitMapper
 
         return new ManyToManyLink(entities[0], entities[1], names[0], names[1]);
     }
+
+    public static CKRecord ToCKRecord(PendingItemShelfChange change)
+    {
+        var record = new CKRecord
+        {
+            RecordName = change.CloudKitRecordName ?? Guid.NewGuid().ToString("D").ToUpperInvariant(),
+            RecordType = ManyToManyRecordType
+        };
+        record.Fields["CD_entityNames"] = new CKRecordField("Item:Shelf");
+        record.Fields["CD_recordNames"] = new CKRecordField($"{change.ItemRecordName}:{change.ShelfRecordName}");
+        record.Fields["CD_relationships"] = new CKRecordField("shelves:items");
+        return record;
+    }
 }

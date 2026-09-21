@@ -187,6 +187,34 @@ public class SqliteShelfRowRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ItemShelfChanges_AreQueuedAndConfirmedForCreateAndDelete()
+    {
+        await _repository.InitializeAsync();
+        var shelf = new Shelf { Title = "Cloud shelf", CloudKitRecordName = "SHELF-CK" };
+        var item = new Item { Title = "Cloud item", RelativePath = "a.zip", CloudKitRecordName = "ITEM-CK" };
+        await _repository.UpsertShelfAsync(shelf, markPendingUpload: false);
+        await _repository.UpsertItemAsync(item, markPendingUpload: false);
+
+        item.ShelfIds.Add(shelf.Id);
+        await _repository.UpsertItemAsync(item);
+        var create = Assert.Single((await _repository.GetPendingUploadsAsync()).ItemShelfChanges);
+        Assert.False(create.IsDelete);
+        Assert.Equal("ITEM-CK", create.ItemRecordName);
+        Assert.Equal("SHELF-CK", create.ShelfRecordName);
+
+        await _repository.ConfirmItemShelfUploadedAsync(item.Id, shelf.Id, "LINK-CK", wasDelete: false);
+        item.ShelfIds.Clear();
+        await _repository.UpsertItemAsync(item);
+        var delete = Assert.Single((await _repository.GetPendingUploadsAsync()).ItemShelfChanges);
+        Assert.True(delete.IsDelete);
+        Assert.Equal("LINK-CK", delete.CloudKitRecordName);
+
+        await _repository.ConfirmItemShelfUploadedAsync(item.Id, shelf.Id, "LINK-CK", wasDelete: true);
+        Assert.Empty((await _repository.GetItemByIdAsync(item.Id))!.ShelfIds);
+        Assert.Empty((await _repository.GetPendingUploadsAsync()).ItemShelfChanges);
+    }
+
+    [Fact]
     public async Task SyncMetadata_CanStoreAndRetrieve()
     {
         await _repository.InitializeAsync();
