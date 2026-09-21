@@ -174,6 +174,11 @@ public sealed partial class PreferencesWindow : Window
         SaveSettingsFromUI();
     }
 
+    private void SettingChanged(object sender, SelectionChangedEventArgs e)
+    {
+        SaveSettingsFromUI();
+    }
+
     private void ComboAppearance_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         SaveSettingsFromUI();

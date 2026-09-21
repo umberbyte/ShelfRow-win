@@ -32,18 +32,32 @@ public static class CoverEditorDialog
             int version = ++loadVersion;
             string entry = candidates.Entries[index];
             name.Text = $"{index + 1} / {candidates.Entries.Count}  {entry}";
-            byte[]? bytes = await generator.ReadCandidateAsync(candidates, entry, cancellationToken);
-            if (bytes is null || version != loadVersion) return;
-            var bitmap = new BitmapImage { DecodePixelWidth = 480 };
-            using var stream = new InMemoryRandomAccessStream();
-            using (var writer = new DataWriter(stream))
+            try
             {
-                writer.WriteBytes(bytes);
-                await writer.StoreAsync();
+                byte[]? bytes = await generator.ReadCandidateAsync(candidates, entry, cancellationToken);
+                if (bytes is null || version != loadVersion) return;
+                var bitmap = new BitmapImage { DecodePixelWidth = 480 };
+                using var stream = new InMemoryRandomAccessStream();
+                using (var writer = new DataWriter(stream))
+                {
+                    writer.WriteBytes(bytes);
+                    await writer.StoreAsync();
+                }
+                stream.Seek(0);
+                await bitmap.SetSourceAsync(stream);
+                if (version == loadVersion) image.Source = bitmap;
             }
-            stream.Seek(0);
-            await bitmap.SetSourceAsync(stream);
-            if (version == loadVersion) image.Source = bitmap;
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                if (version == loadVersion)
+                {
+                    image.Source = null;
+                    name.Text = $"プレビューを読み込めません: {ex.Message}";
+                }
+            }
         }
 
         slider.ValueChanged += async (_, args) => await LoadPreviewAsync((int)Math.Round(args.NewValue));

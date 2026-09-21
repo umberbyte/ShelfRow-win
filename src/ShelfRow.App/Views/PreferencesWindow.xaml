@@ -157,8 +157,8 @@
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBox Grid.Column="0" Text="{Binding Extensions, Mode=TwoWay}" PlaceholderText="拡張子 (コンマ区切り)" />
-                                                <TextBox Grid.Column="1" Text="{Binding ApplicationPath, Mode=TwoWay}" PlaceholderText="アプリケーションパス" />
+                                                <TextBox Grid.Column="0" Text="{Binding Extensions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="拡張子 (コンマ区切り)" TextChanged="SettingChanged" />
+                                                <TextBox Grid.Column="1" Text="{Binding ApplicationPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="アプリケーションパス" TextChanged="SettingChanged" />
                                                 <Button Grid.Column="2" Content="参照..." Click="BrowseHelperMapping_Click" Tag="{Binding}" />
                                             </Grid>
                                         </DataTemplate>
@@ -189,7 +189,7 @@
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <ComboBox Grid.Column="0" SelectedValue="{Binding Field, Mode=TwoWay}" SelectedValuePath="Tag">
+                                                <ComboBox Grid.Column="0" SelectedValue="{Binding Field, Mode=TwoWay}" SelectedValuePath="Tag" SelectionChanged="SettingChanged">
                                                     <ComboBoxItem Content="作者" Tag="author" />
                                                     <ComboBoxItem Content="ジャンル" Tag="genre" />
                                                     <ComboBoxItem Content="関連" Tag="relation" />
@@ -197,7 +197,7 @@
                                                     <ComboBoxItem Content="キーワードB" Tag="keywordB" />
                                                     <ComboBoxItem Content="メモ" Tag="memo" />
                                                 </ComboBox>
-                                                <TextBox Grid.Column="1" Text="{Binding TermsDisplay, Mode=TwoWay}" PlaceholderText="例: Lorem ipsum, Dolor sit, Amet" />
+                                                <TextBox Grid.Column="1" Text="{Binding TermsDisplay, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="例: Lorem ipsum, Dolor sit, Amet" TextChanged="SettingChanged" />
                                                 <Button Grid.Column="2" Content="削除" Click="RemoveKeywordRule_Click" Tag="{Binding}" />
                                             </Grid>
                                         </DataTemplate>
@@ -248,17 +248,10 @@
                     <StackPanel x:Name="PaneICloud" Spacing="16" Visibility="Collapsed">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="16">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="iCloud同期" FontWeight="Medium" />
-                                        <TextBlock Text="本・シェルフ・ボリュームの書誌情報をCloudKit経由で同期します。サムネイル画像と書籍ファイルはiCloudへ送信されません。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                    <ToggleSwitch Grid.Column="1" x:Name="ToggleICloudSync" IsOn="True" OnContent="オン" OffContent="オフ" />
-                                </Grid>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="iCloud同期" FontWeight="Medium" />
+                                    <TextBlock Text="本・シェルフ・ボリュームの書誌情報を、操作した時点でCloudKitと双方向同期します。サムネイル画像と書籍ファイルはiCloudへ送信されません。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
 
                                 <MenuFlyoutSeparator />
 
@@ -268,8 +261,8 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="現在のモード" FontWeight="Medium" />
-                                        <TextBlock x:Name="TxtICloudMode" Text="クラウド (iCloudと同期中)" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="手動同期" FontWeight="Medium" />
+                                        <TextBlock Text="ローカルの変更を送信した後、iCloud側の増分変更を受信します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
                                     <Button Grid.Column="1" Content="今すぐ同期" Click="SyncNow_Click" />
                                 </Grid>

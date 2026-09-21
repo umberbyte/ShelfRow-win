@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Collections.Specialized;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -21,13 +22,23 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
         this.InitializeComponent();
 
         VolumeItemsRepeater.ItemsSource = _mainViewModel.Volumes;
-        _mainViewModel.Volumes.CollectionChanged += (s, e) => UpdateEmptyState();
+        _mainViewModel.Volumes.CollectionChanged += Volumes_CollectionChanged;
         _mainViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        Closed += VolumeSettingsDialog_Closed;
 
         UpdateEmptyState();
         UpdateSyncProgress();
 
         PrimaryButtonClick += VolumeSettingsDialog_PrimaryButtonClick;
+    }
+
+    private void Volumes_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyState();
+
+    private void VolumeSettingsDialog_Closed(ContentDialog sender, ContentDialogClosedEventArgs args)
+    {
+        _mainViewModel.Volumes.CollectionChanged -= Volumes_CollectionChanged;
+        _mainViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        Closed -= VolumeSettingsDialog_Closed;
     }
 
     private void UpdateEmptyState()
@@ -65,7 +76,9 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"SyncThumbnails error: {ex.Message}");
+            SyncProgressPanel.Visibility = Visibility.Visible;
+            SyncProgressStatusText.Text = $"同期に失敗しました: {ex.Message}";
+            App.Log($"SyncThumbnails: failed {ex}");
         }
     }
 
@@ -124,6 +137,8 @@ public sealed partial class VolumeSettingsDialog : ContentDialog
         catch (Exception ex)
         {
             App.Log($"FolderPicker: failed {ex}");
+            SyncProgressPanel.Visibility = Visibility.Visible;
+            SyncProgressStatusText.Text = $"フォルダーを選択できませんでした: {ex.Message}";
         }
     }
 }

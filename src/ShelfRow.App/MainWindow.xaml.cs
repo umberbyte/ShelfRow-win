@@ -156,19 +156,32 @@ public sealed partial class MainWindow : Window
             || Content?.XamlRoot is not { } root)
             return;
 
-        bool? changed = await CoverEditorDialog.ShowAsync(root, selected.Model, generator);
-        if (changed == true)
+        try
         {
-            App.ImageLoader?.ClearMemoryCache();
-            App.ImageLoader?.InvalidateManifest();
-            selected.ReloadThumbnail();
+            bool? changed = await CoverEditorDialog.ShowAsync(root, selected.Model, generator);
+            if (changed == true)
+            {
+                App.ImageLoader?.ClearMemoryCache();
+                App.ImageLoader?.InvalidateManifest();
+                selected.ReloadThumbnail();
+            }
+            else if (changed is null)
+            {
+                await new ContentDialog
+                {
+                    Title = "表紙を編集できません",
+                    Content = "この書籍は画像を含むZIP/CBZファイルとして開けませんでした。",
+                    CloseButtonText = "OK",
+                    XamlRoot = root
+                }.ShowAsync();
+            }
         }
-        else if (changed is null)
+        catch (Exception ex)
         {
             await new ContentDialog
             {
-                Title = "表紙を編集できません",
-                Content = "この書籍は画像を含むZIP/CBZファイルとして開けませんでした。",
+                Title = "表紙の編集に失敗しました",
+                Content = ex.Message,
                 CloseButtonText = "OK",
                 XamlRoot = root
             }.ShowAsync();

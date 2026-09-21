@@ -62,6 +62,8 @@ public sealed class SmartShelfEditorDialog
             CloseButtonText = "キャンセル",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
+            MinWidth = 640,
+            MaxWidth = 720,
             Content = new ScrollViewer { Content = panel, MaxHeight = 600 }
         };
         bool valid = true;
@@ -102,4 +104,3 @@ public sealed class SmartShelfEditorDialog
         return selected.Count == 0 ? null : selected;
     }
 }
-
