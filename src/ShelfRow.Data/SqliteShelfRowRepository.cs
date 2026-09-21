@@ -15,6 +15,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 {
     private readonly string _connectionString;
     private SqliteConnection? _connection;
+    private readonly SemaphoreSlim _databaseGate = new(1, 1);
 
     public SqliteShelfRowRepository(string? databasePath = null)
     {
@@ -50,8 +51,21 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         return _connection;
     }
 
+    private async Task<IDisposable> EnterDatabaseAsync(CancellationToken cancellationToken)
+    {
+        await _databaseGate.WaitAsync(cancellationToken);
+        return new DatabaseLease(_databaseGate);
+    }
+
+    private sealed class DatabaseLease(SemaphoreSlim gate) : IDisposable
+    {
+        private SemaphoreSlim? _gate = gate;
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.Release();
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -210,6 +224,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<Item?> GetItemByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM Items WHERE Id = @Id LIMIT 1";
@@ -227,6 +242,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<Item?> GetItemByLegacyIdAsync(int legacyId, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM Items WHERE LegacyId = @LegacyId LIMIT 1";
@@ -244,6 +260,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<Item>> GetItemsForImportMergeAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         var items = new List<Item>();
         var itemsById = new Dictionary<Guid, Item>();
@@ -280,6 +297,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<Item>> GetItemsAsync(int skip = 0, int take = 100, Guid? shelfId = null, string? search = null, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
 
@@ -326,6 +344,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<int> GetItemCountAsync(Guid? shelfId = null, string? search = null, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
 
@@ -367,6 +386,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task UpsertItemsBatchAsync(IEnumerable<Item> items, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
 
@@ -481,6 +501,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task DeleteItemAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
@@ -500,6 +521,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<Guid>> GetAllItemIdsAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT Id FROM Items";
@@ -516,6 +538,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<LocalCoverState>> GetLocalCoverStatesAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM LocalCoverStates";
@@ -529,6 +552,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<LocalCoverState?> GetLocalCoverStateAsync(Guid itemId, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM LocalCoverStates WHERE ItemId = @ItemId LIMIT 1";
@@ -540,6 +564,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task UpsertLocalCoverStatesAsync(IEnumerable<LocalCoverState> states, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
@@ -635,6 +660,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<Shelf>> GetShelvesAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM Shelves ORDER BY SortOrder ASC";
@@ -660,6 +686,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task UpsertShelfAsync(Shelf shelf, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -696,6 +723,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task DeleteShelfAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
@@ -715,6 +743,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<IReadOnlyList<Volume>> GetVolumesAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM Volumes";
@@ -736,6 +765,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<Volume?> GetVolumeByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM Volumes WHERE Id = @Id LIMIT 1";
@@ -757,6 +787,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task UpsertVolumeAsync(Volume volume, bool markPendingUpload = true, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -785,6 +816,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task<string?> GetSyncMetadataAsync(string key, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT Value FROM SyncMetadata WHERE Key = @Key LIMIT 1";
@@ -795,6 +827,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task SetSyncMetadataAsync(string key, string value, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -971,6 +1004,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task<int> ApplyItemShelfLinksAsync(IEnumerable<ItemShelfLink> links, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
 
@@ -1010,6 +1044,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task<int> ResolveVolumeReferencesAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -1028,6 +1063,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task<PendingUploads> GetPendingUploadsAsync(int limit = 200, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
 
         var items = new List<Item>();
@@ -1106,6 +1142,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task ConfirmUploadedAsync(string table, Guid id, string recordName, string? changeTag, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         if (table is not ("Items" or "Shelves" or "Volumes"))
             throw new ArgumentException($"Unknown table '{table}'.", nameof(table));
 
@@ -1125,6 +1162,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task DeleteSyncMetadataAsync(string key, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM SyncMetadata WHERE Key = @Key";
@@ -1139,6 +1177,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
         bool wasDelete,
         CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = wasDelete
@@ -1153,6 +1192,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
 
     public async Task ConfirmDeletionUploadedAsync(string recordName, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM PendingCloudKitDeletions WHERE RecordName = @RecordName";
@@ -1165,6 +1205,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task MarkAllPendingUploadAsync(CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         foreach (string table in new[] { "Items", "Shelves", "Volumes" })
         {
@@ -1183,6 +1224,7 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// </summary>
     public async Task DeleteByCloudKitRecordNameAsync(string recordName, CancellationToken cancellationToken = default)
     {
+        using var lease = await EnterDatabaseAsync(cancellationToken);
         var conn = await GetOpenConnectionAsync(cancellationToken);
         using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
 

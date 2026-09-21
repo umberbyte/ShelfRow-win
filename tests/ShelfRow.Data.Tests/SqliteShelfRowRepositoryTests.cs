@@ -109,6 +109,27 @@ public class SqliteShelfRowRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SharedRepository_SerializesConcurrentReadsAndWrites()
+    {
+        await _repository.InitializeAsync();
+
+        var operations = Enumerable.Range(0, 80).Select(async i =>
+        {
+            var item = new Item
+            {
+                Title = $"Concurrent {i}",
+                RelativePath = $"parallel/{i}.zip"
+            };
+            await _repository.UpsertItemAsync(item);
+            _ = await _repository.GetItemsAsync(0, 10, search: "Concurrent");
+            _ = await _repository.GetItemCountAsync();
+        });
+
+        await Task.WhenAll(operations);
+        Assert.Equal(80, await _repository.GetItemCountAsync());
+    }
+
+    [Fact]
     public async Task DeleteItem_PreservesCloudRecordDeletionUntilConfirmed()
     {
         await _repository.InitializeAsync();
