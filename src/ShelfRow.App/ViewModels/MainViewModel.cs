@@ -693,6 +693,13 @@ public class MainViewModel : INotifyPropertyChanged
         SelectedShelf = newShelf;
     }
 
+    public async Task SaveShelfAsync(Shelf shelf)
+    {
+        await _repository.UpsertShelfAsync(shelf);
+        await LoadShelvesAsync();
+        SelectedShelf = Shelves.FirstOrDefault(existing => existing.Id == shelf.Id);
+    }
+
     public async Task DeleteShelfAsync(Shelf shelf)
     {
         await _repository.DeleteShelfAsync(shelf.Id);

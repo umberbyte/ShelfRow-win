@@ -5,6 +5,28 @@ namespace ShelfRow.Core.Tests;
 
 public class SmartConditionsTests
 {
+    [Fact]
+    public void EncodeDecode_RoundTripsEditableConditions()
+    {
+        var original = new SmartConditions
+        {
+            Keyword = new() { Field = "Genre", Text = "SF", Mode = 2 },
+            Date = new() { Field = 1, Days = 14, Mode = 1 },
+            Types = new() { 0, 3 },
+            Rates = new() { 4, 5 },
+            UnreadOnly = true
+        };
+
+        var decoded = SmartConditionsCodec.Decode(SmartConditionsCodec.Encode(original));
+
+        Assert.Equal("Genre", decoded.Keyword!.Field);
+        Assert.Equal("SF", decoded.Keyword.Text);
+        Assert.Equal(2, decoded.Keyword.Mode);
+        Assert.Equal(14, decoded.Date!.Days);
+        Assert.Equal(new[] { 0, 3 }, decoded.Types!.OrderBy(x => x));
+        Assert.Equal(new[] { 4, 5 }, decoded.Rates!.OrderBy(x => x));
+        Assert.True(decoded.UnreadOnly);
+    }
     /// <summary>
     /// Taken verbatim from the live library's "Bavel" shelf.
     /// </summary>

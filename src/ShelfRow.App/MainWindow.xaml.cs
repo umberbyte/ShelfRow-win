@@ -150,10 +150,19 @@ public sealed partial class MainWindow : Window
 
     private async void NewSmartShelf_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel != null)
+        if (_viewModel != null && Content?.XamlRoot is { } root)
         {
-            await _viewModel.CreateSmartShelfAsync();
+            var shelf = new Shelf { Title = string.Empty, Type = 1, SortOrder = _viewModel.SmartShelves.Count };
+            if (await SmartShelfEditorDialog.ShowAsync(root, shelf, _viewModel.Settings))
+                await _viewModel.SaveShelfAsync(shelf);
         }
+    }
+
+    private async void EditSmartShelf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { Tag: Shelf shelf } && _viewModel is not null && Content?.XamlRoot is { } root
+            && await SmartShelfEditorDialog.ShowAsync(root, shelf, _viewModel.Settings))
+            await _viewModel.SaveShelfAsync(shelf);
     }
 
     private async void DeleteShelf_Click(object sender, RoutedEventArgs e)

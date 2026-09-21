@@ -117,6 +117,7 @@
                                             <TextBlock Grid.Column="1" Text="{x:Bind Title}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                             <Grid.ContextFlyout>
                                                 <MenuFlyout>
+                                                    <MenuFlyoutItem Text="編集..." Click="EditSmartShelf_Click" Tag="{x:Bind}" />
                                                     <MenuFlyoutItem Text="削除" Click="DeleteShelf_Click" Tag="{x:Bind}" />
                                                 </MenuFlyout>
                                             </Grid.ContextFlyout>

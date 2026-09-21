@@ -50,6 +50,36 @@ public class SmartConditions
 
 public static class SmartConditionsCodec
 {
+    public static string Encode(SmartConditions conditions)
+    {
+        var root = new Dictionary<string, object?>();
+        if (conditions.Keyword is { Text.Length: > 0 } keyword)
+        {
+            root["Keyword Condition"] = new Dictionary<string, object?>
+            {
+                ["Condition"] = keyword.Field,
+                ["Key"] = keyword.Text,
+                ["Option"] = keyword.Mode
+            };
+        }
+        if (conditions.Date is { } date)
+        {
+            root["Date Condition"] = new Dictionary<string, object?>
+            {
+                ["Condition"] = date.Field,
+                ["Key"] = Math.Max(1, date.Days),
+                ["Option"] = date.Mode
+            };
+        }
+        if (conditions.Types is { Count: > 0 })
+            root["Type Condition"] = new Dictionary<string, object?> { ["Key"] = conditions.Types.OrderBy(x => x).ToArray() };
+        if (conditions.Rates is { Count: > 0 })
+            root["Rate Condition"] = new Dictionary<string, object?> { ["Key"] = conditions.Rates.OrderBy(x => x).ToArray() };
+        if (conditions.UnreadOnly)
+            root["Unseen Condition"] = new Dictionary<string, object?> { ["Key"] = true };
+        return JsonSerializer.Serialize(root);
+    }
+
     public static SmartConditions Decode(string? json)
     {
         var result = new SmartConditions();
