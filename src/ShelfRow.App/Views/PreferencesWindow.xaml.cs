@@ -76,7 +76,6 @@ public sealed partial class PreferencesWindow : Window
         ListKeywordRules.ItemsSource = KeywordRules;
 
         // Customize
-        TxtRenameFormat.Text = _settings.CustomRenameFormat;
         TxtType0.Text = _settings.TypeNameThickBook;
         TxtType1.Text = _settings.TypeNameThinBook;
         TxtType2.Text = _settings.TypeNamePartBook;
@@ -126,7 +125,6 @@ public sealed partial class PreferencesWindow : Window
         _settings.KeywordEquivalenceRules = KeywordRules.ToList();
 
         // Customize
-        _settings.CustomRenameFormat = TxtRenameFormat.Text;
         _settings.TypeNameThickBook = TxtType0.Text;
         _settings.TypeNameThinBook = TxtType1.Text;
         _settings.TypeNamePartBook = TxtType2.Text;
@@ -148,6 +146,7 @@ public sealed partial class PreferencesWindow : Window
         _settings.ThumbnailDistributionRoot = TxtThumbnailRoot.Text;
 
         _settingsService.Save(_settings);
+        _mainViewModel.ReloadSettings();
     }
 
     private void SettingChanged(object sender, RoutedEventArgs e)
@@ -464,4 +463,3 @@ public sealed partial class PreferencesWindow : Window
 
     #endregion
 }
-

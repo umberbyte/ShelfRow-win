@@ -109,6 +109,37 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<VolumeViewModel> Volumes { get; }
 
     public AppSettings Settings => _settingsService.Current;
+    public string AuthorFieldLabel => Settings.EffectiveAuthorLabel + ":";
+    public string GenreFieldLabel => Settings.EffectiveGenreLabel + ":";
+    public string RelationFieldLabel => Settings.EffectiveRelationLabel + ":";
+    public string KeywordAFieldLabel => Settings.EffectiveKeywordALabel + ":";
+    public string KeywordBFieldLabel => Settings.EffectiveKeywordBLabel + ":";
+    public string SearchAuthorLabel => $"この{Settings.EffectiveAuthorLabel}を検索";
+    public string SearchGenreLabel => $"この{Settings.EffectiveGenreLabel}を検索";
+    public string SearchRelationLabel => $"この{Settings.EffectiveRelationLabel}を検索";
+    public string SearchKeywordALabel => $"この{Settings.EffectiveKeywordALabel}を検索";
+    public string SearchKeywordBLabel => $"この{Settings.EffectiveKeywordBLabel}を検索";
+    public string TypeName0 => Settings.GetEffectiveTypeName(0);
+    public string TypeName1 => Settings.GetEffectiveTypeName(1);
+    public string TypeName2 => Settings.GetEffectiveTypeName(2);
+    public string TypeName3 => Settings.GetEffectiveTypeName(3);
+    public string TypeName4 => Settings.GetEffectiveTypeName(4);
+    public string TypeName5 => Settings.GetEffectiveTypeName(5);
+
+    public void ReloadSettings()
+    {
+        _settingsService.Load();
+        foreach (string property in new[]
+        {
+            nameof(Settings), nameof(AuthorFieldLabel), nameof(GenreFieldLabel),
+            nameof(RelationFieldLabel), nameof(KeywordAFieldLabel), nameof(KeywordBFieldLabel),
+            nameof(SearchAuthorLabel), nameof(SearchGenreLabel), nameof(SearchRelationLabel),
+            nameof(SearchKeywordALabel), nameof(SearchKeywordBLabel),
+            nameof(TypeName0), nameof(TypeName1), nameof(TypeName2),
+            nameof(TypeName3), nameof(TypeName4), nameof(TypeName5), nameof(SortKeyLabel)
+        }) OnPropertyChanged(property);
+        ApplyFilterAndSort();
+    }
 
     public System.Windows.Input.ICommand SyncCommand { get; }
     public System.Windows.Input.ICommand SyncThumbnailsCommand { get; }
@@ -490,14 +521,8 @@ public class MainViewModel : INotifyPropertyChanged
         if (!string.IsNullOrWhiteSpace(_searchQuery))
         {
             string q = _searchQuery.Trim();
-            query = query.Where(i =>
-                (i.Title?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (i.Author?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (i.Genre?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (i.KeywordA?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (i.KeywordB?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (i.Memo?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
-            );
+            query = query.Where(i => KeywordEquivalenceMatcher.Matches(
+                i, q, Settings.KeywordEquivalenceRules));
         }
 
         // Unread filter

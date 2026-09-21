@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 using ShelfRow.App.ViewModels;
 using ShelfRow.App.Views;
 using ShelfRow.Core.Models;
@@ -48,7 +50,49 @@ public sealed partial class MainWindow : Window
             {
                 _viewModel.OpenSettingsRequested += ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification += ViewModel_ImportCompletedNotification;
+                ApplyStartupLock();
             }
+        }
+    }
+
+    private void ApplyStartupLock()
+    {
+        bool shouldLock = _viewModel?.Settings.PasswordLockEnabled == true
+                          && !string.IsNullOrEmpty(_viewModel.Settings.PasswordValue);
+        LockOverlay.Visibility = shouldLock ? Visibility.Visible : Visibility.Collapsed;
+        if (shouldLock)
+            LockPasswordBox.Focus(FocusState.Programmatic);
+    }
+
+    private void Unlock_Click(object sender, RoutedEventArgs e) => TryUnlock();
+
+    private void LockPasswordBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            TryUnlock();
+        }
+    }
+
+    private void LockPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        LockErrorText.Visibility = Visibility.Collapsed;
+    }
+
+    private void TryUnlock()
+    {
+        if (_viewModel is not null && LockPasswordBox.Password == _viewModel.Settings.PasswordValue)
+        {
+            LockPasswordBox.Password = string.Empty;
+            LockErrorText.Visibility = Visibility.Collapsed;
+            LockOverlay.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            LockPasswordBox.Password = string.Empty;
+            LockErrorText.Visibility = Visibility.Visible;
+            LockPasswordBox.Focus(FocusState.Programmatic);
         }
     }
 

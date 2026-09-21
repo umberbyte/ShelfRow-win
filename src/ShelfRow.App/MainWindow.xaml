@@ -236,37 +236,37 @@
                             <Button Click="FilterType0_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EAB308" />
-                                    <TextBlock Text="厚い本" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName0, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Click="FilterType1_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#3B82F6" />
-                                    <TextBlock Text="薄い本" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName1, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Click="FilterType2_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#22C55E" />
-                                    <TextBlock Text="本の一部" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName2, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Click="FilterType3_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EC4899" />
-                                    <TextBlock Text="画像セット" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName3, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Click="FilterType4_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE8A5;" FontSize="12" Foreground="#9CA3AF" />
-                                    <TextBlock Text="テキスト" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName4, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Click="FilterType5_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE8B2;" FontSize="12" Foreground="#A855F7" />
-                                    <TextBlock Text="ムービー" FontSize="12" />
+                                    <TextBlock Text="{x:Bind ViewModel.TypeName5, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -488,11 +488,11 @@
                                         <ColumnDefinition Width="78" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="作者:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.AuthorFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Author, Mode=TwoWay}" FontSize="12" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchAuthorKeyword_Click"
-                                        Content="この作者を検索" Visibility="{x:Bind ViewModel.SelectedItem.AuthorVisibility, Mode=OneWay}" />
+                                        Content="{x:Bind ViewModel.SearchAuthorLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.AuthorVisibility, Mode=OneWay}" />
                             </StackPanel>
 
                             <!-- Rating -->
@@ -518,11 +518,11 @@
                                         <ColumnDefinition Width="78" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="キーワードA:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.KeywordAFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordA, Mode=TwoWay}" FontSize="12" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordA_Click"
-                                        Content="このキーワードAを検索" Visibility="{x:Bind ViewModel.SelectedItem.KeywordAVisibility, Mode=OneWay}" />
+                                        Content="{x:Bind ViewModel.SearchKeywordALabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.KeywordAVisibility, Mode=OneWay}" />
                             </StackPanel>
 
                             <!-- Keyword B -->
@@ -532,11 +532,11 @@
                                         <ColumnDefinition Width="78" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="キーワードB:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.KeywordBFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.KeywordB, Mode=TwoWay}" FontSize="12" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchKeywordB_Click"
-                                        Content="このキーワードBを検索" Visibility="{x:Bind ViewModel.SelectedItem.KeywordBVisibility, Mode=OneWay}" />
+                                        Content="{x:Bind ViewModel.SearchKeywordBLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.KeywordBVisibility, Mode=OneWay}" />
                             </StackPanel>
 
                             <!-- Memo -->
@@ -556,11 +556,11 @@
                                         <ColumnDefinition Width="78" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="ジャンル:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.GenreFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Genre, Mode=TwoWay}" FontSize="12" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchGenreKeyword_Click"
-                                        Content="このジャンルを検索" Visibility="{x:Bind ViewModel.SelectedItem.GenreVisibility, Mode=OneWay}" />
+                                        Content="{x:Bind ViewModel.SearchGenreLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.GenreVisibility, Mode=OneWay}" />
                             </StackPanel>
 
                             <!-- Relation -->
@@ -570,11 +570,11 @@
                                         <ColumnDefinition Width="78" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="関連:" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.RelationFieldLabel, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedItem.Relation, Mode=TwoWay}" FontSize="12" />
                                 </Grid>
                                 <Button Margin="86,0,0,0" Padding="8,2" FontSize="11" Click="SearchRelationKeyword_Click"
-                                        Content="この関連を検索" Visibility="{x:Bind ViewModel.SelectedItem.RelationVisibility, Mode=OneWay}" />
+                                        Content="{x:Bind ViewModel.SearchRelationLabel, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedItem.RelationVisibility, Mode=OneWay}" />
                             </StackPanel>
                         </StackPanel>
 
@@ -600,6 +600,20 @@
 
             <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.TotalBooksCountText, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid x:Name="LockOverlay" Grid.RowSpan="2" Visibility="Collapsed"
+              Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Canvas.ZIndex="1000">
+            <StackPanel Width="280" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE72E;" FontSize="48" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock Text="ShelfRowはロックされています。" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <PasswordBox x:Name="LockPasswordBox" PlaceholderText="パスワードを入力してください"
+                             KeyDown="LockPasswordBox_KeyDown" PasswordChanged="LockPasswordBox_PasswordChanged" />
+                <TextBlock x:Name="LockErrorText" Text="パスワードが正しくありません。"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed"
+                           HorizontalAlignment="Center" />
+                <Button Content="OK" Click="Unlock_Click" HorizontalAlignment="Center" Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>
