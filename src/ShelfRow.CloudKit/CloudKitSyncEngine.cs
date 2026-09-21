@@ -237,14 +237,18 @@ public class CloudKitSyncEngine
                 progress?.Report(processed);
             }
 
-            if (!string.IsNullOrEmpty(syncToken))
-                await _repository.SetSyncMetadataAsync(SyncTokenKey, syncToken, cancellationToken);
         }
 
         await _repository.ResolveVolumeReferencesAsync(cancellationToken);
 
         if (links.Count > 0)
             await _repository.ApplyItemShelfLinksAsync(links, cancellationToken);
+
+        // The token is the commit point. Saving it per page could permanently skip
+        // CDMR links whose target arrived on a later page, or any final relationship
+        // work interrupted after the page token was stored.
+        if (!string.IsNullOrEmpty(syncToken))
+            await _repository.SetSyncMetadataAsync(SyncTokenKey, syncToken, cancellationToken);
 
         return new SyncResult(items, shelves, volumes, links.Count, deletions);
     }
