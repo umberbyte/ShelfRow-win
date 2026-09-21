@@ -1,9 +1,11 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Windowing;
 using Windows.System;
 using ShelfRow.App.ViewModels;
 using ShelfRow.App.Views;
@@ -33,6 +35,7 @@ public sealed partial class MainWindow : Window
         var enterHandler = new Microsoft.UI.Xaml.Input.KeyEventHandler(BookList_KeyDown);
         BookGridView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
         BookListView.AddHandler(UIElement.KeyDownEvent, enterHandler, handledEventsToo: true);
+        AppWindow.Closing += MainWindow_Closing;
     }
 
     public MainViewModel? ViewModel
@@ -44,6 +47,7 @@ public sealed partial class MainWindow : Window
             {
                 _viewModel.OpenSettingsRequested -= ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification -= ViewModel_ImportCompletedNotification;
+                _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
             }
 
             _viewModel = value;
@@ -51,9 +55,57 @@ public sealed partial class MainWindow : Window
             {
                 _viewModel.OpenSettingsRequested += ViewModel_OpenSettingsRequested;
                 _viewModel.ImportCompletedNotification += ViewModel_ImportCompletedNotification;
+                _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+                ApplyDisplaySettings();
                 ApplyStartupLock();
             }
         }
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.Settings))
+            ApplyDisplaySettings();
+    }
+
+    private void ApplyDisplaySettings()
+    {
+        if (_viewModel is null) return;
+
+        RootGrid.RequestedTheme = _viewModel.Settings.AppearanceMode.ToLowerInvariant() switch
+        {
+            "light" => ElementTheme.Light,
+            "dark" => ElementTheme.Dark,
+            _ => ElementTheme.Default
+        };
+
+        bool compact = _viewModel.Settings.CompactDisplay;
+        SidebarColumn.Width = new GridLength(compact ? 195 : 260);
+        InspectorColumn.Width = new GridLength(compact ? 240 : 320);
+        SidebarHeader.Padding = compact ? new Thickness(12, 10, 12, 8) : new Thickness(18, 16, 18, 12);
+        SidebarScroll.Padding = compact ? new Thickness(4, 0, 4, 4) : new Thickness(8, 0, 8, 8);
+        SidebarFooter.Padding = compact ? new Thickness(8, 5, 8, 5) : new Thickness(12, 8, 12, 8);
+        TopHeader.Padding = compact ? new Thickness(15, 10, 15, 7) : new Thickness(20, 14, 20, 10);
+        FilterPanel.Padding = compact ? new Thickness(15, 0, 15, 8) : new Thickness(20, 0, 20, 12);
+        BookGridView.Padding = compact ? new Thickness(15, 12, 15, 12) : new Thickness(20, 16, 20, 16);
+        BookListView.Padding = compact ? new Thickness(9, 6, 9, 6) : new Thickness(12, 8, 12, 8);
+        InspectorScroll.Padding = compact ? new Thickness(12, 15, 12, 18) : new Thickness(16, 20, 16, 24);
+    }
+
+    private void MainWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_viewModel?.Settings.CloseOnExit != false)
+        {
+            _preferencesWindow?.Close();
+            return;
+        }
+
+        // macOS keeps the app available in the Dock. The Windows equivalent keeps
+        // the taskbar button alive by minimizing rather than leaving a hidden,
+        // unreachable process behind.
+        args.Cancel = true;
+        if (sender.Presenter is OverlappedPresenter presenter)
+            presenter.Minimize();
     }
 
     private void ApplyStartupLock()
@@ -204,10 +256,48 @@ public sealed partial class MainWindow : Window
 
     private async void NewStandardShelf_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel != null)
+        if (_viewModel is null || Content?.XamlRoot is not { } root) return;
+
+        var shelf = new Shelf { Type = 0, SortOrder = _viewModel.StaticShelves.Count };
+        if (await EditStandardShelfTitleAsync(root, shelf, "新規標準シェルフ"))
+            await _viewModel.SaveShelfAsync(shelf);
+    }
+
+    private async void EditStandardShelf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { Tag: Shelf shelf }
+            && _viewModel is not null
+            && Content?.XamlRoot is { } root
+            && await EditStandardShelfTitleAsync(root, shelf, "シェルフ名を変更"))
         {
-            await _viewModel.CreateStandardShelfAsync();
+            await _viewModel.SaveShelfAsync(shelf);
         }
+    }
+
+    private static async Task<bool> EditStandardShelfTitleAsync(XamlRoot root, Shelf shelf, string title)
+    {
+        var editor = new TextBox
+        {
+            Text = shelf.Title,
+            PlaceholderText = "シェルフ名",
+            MinWidth = 320,
+            SelectionStart = 0,
+            SelectionLength = shelf.Title.Length
+        };
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = editor,
+            PrimaryButtonText = "保存",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Primary,
+            IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(editor.Text),
+            XamlRoot = root
+        };
+        editor.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(editor.Text);
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
+        shelf.Title = editor.Text.Trim();
+        return true;
     }
 
     private async void NewSmartShelf_Click(object sender, RoutedEventArgs e)
@@ -229,10 +319,22 @@ public sealed partial class MainWindow : Window
 
     private async void DeleteShelf_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is MenuFlyoutItem item && item.Tag is Shelf shelf && _viewModel != null)
+        if (sender is not MenuFlyoutItem { Tag: Shelf shelf }
+            || _viewModel is null
+            || Content?.XamlRoot is not { } root)
+            return;
+
+        var dialog = new ContentDialog
         {
+            Title = "シェルフを削除",
+            Content = $"「{shelf.Title}」を削除します。\nシェルフ内の本と実体ファイルは削除されません。",
+            PrimaryButtonText = "削除",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             await _viewModel.DeleteShelfAsync(shelf);
-        }
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -251,6 +353,93 @@ public sealed partial class MainWindow : Window
         }
 
         _preferencesWindow.Activate();
+    }
+
+    #endregion
+
+    #region Book Context Menu
+
+    private void BookContextFlyout_Opening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout
+            || flyout.Target is not FrameworkElement { DataContext: ItemViewModel book }
+            || _viewModel is null)
+            return;
+
+        flyout.Items.Clear();
+        var open = new MenuFlyoutItem { Text = "開く", Icon = new FontIcon { Glyph = "\uE8A7" } };
+        open.Click += async (_, _) => await _viewModel.OpenItemAsync(book);
+        flyout.Items.Add(open);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
+        var unread = new ToggleMenuFlyoutItem { Text = "未読", IsChecked = book.IsUnread };
+        unread.Click += (_, _) => book.IsUnread = unread.IsChecked;
+        flyout.Items.Add(unread);
+
+        var ratings = new MenuFlyoutSubItem { Text = "レート" };
+        for (int rating = 0; rating <= 5; rating++)
+        {
+            int selectedRating = rating;
+            var ratingItem = new ToggleMenuFlyoutItem
+            {
+                Text = rating == 0 ? "なし" : new string('★', rating),
+                IsChecked = book.Rating == rating
+            };
+            ratingItem.Click += (_, _) => book.Rating = selectedRating;
+            ratings.Items.Add(ratingItem);
+        }
+        flyout.Items.Add(ratings);
+
+        var types = new MenuFlyoutSubItem { Text = "種類" };
+        for (int type = 0; type < 6; type++)
+        {
+            int selectedType = type;
+            var typeItem = new ToggleMenuFlyoutItem
+            {
+                Text = _viewModel.Settings.GetEffectiveTypeName(type),
+                IsChecked = book.BookType == type
+            };
+            typeItem.Click += (_, _) => book.BookType = selectedType;
+            types.Items.Add(typeItem);
+        }
+        flyout.Items.Add(types);
+
+        var shelves = new MenuFlyoutSubItem { Text = "標準シェルフ" };
+        foreach (Shelf shelf in _viewModel.StaticShelves)
+        {
+            var membership = new ToggleMenuFlyoutItem
+            {
+                Text = shelf.Title,
+                IsChecked = book.Model.ShelfIds.Contains(shelf.Id)
+            };
+            membership.Click += async (_, _) =>
+                await _viewModel.SetItemShelfMembershipAsync(book, shelf, membership.IsChecked);
+            shelves.Items.Add(membership);
+        }
+        if (shelves.Items.Count == 0)
+            shelves.Items.Add(new MenuFlyoutItem { Text = "標準シェルフがありません", IsEnabled = false });
+        flyout.Items.Add(shelves);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
+        var delete = new MenuFlyoutItem { Text = "ライブラリから削除..." };
+        delete.Click += async (_, _) => await ConfirmDeleteItemAsync(book);
+        flyout.Items.Add(delete);
+    }
+
+    private async Task ConfirmDeleteItemAsync(ItemViewModel book)
+    {
+        if (_viewModel is null || Content?.XamlRoot is not { } root) return;
+        var dialog = new ContentDialog
+        {
+            Title = "ライブラリから削除",
+            Content = $"「{book.Title}」をShelfRowのライブラリから削除します。\n実体ファイルは削除されません。",
+            PrimaryButtonText = "削除",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            await _viewModel.DeleteItemAsync(book);
     }
 
     #endregion

@@ -45,7 +45,19 @@ public class CloudKitSyncEngine
 
             var owners = new Dictionary<string, (string Table, Guid Id)>(StringComparer.Ordinal);
             var linkOwners = new Dictionary<string, PendingItemShelfChange>(StringComparer.Ordinal);
+            var deletionOwners = new HashSet<string>(StringComparer.Ordinal);
             var request = new CKModifyRecordsRequest();
+
+            foreach (var deletion in pending.Deletions)
+            {
+                if (request.Operations.Count >= ModifyBatchSize) break;
+                request.Operations.Add(new CKRecordOperation
+                {
+                    OperationType = "delete",
+                    Record = new CKRecord { RecordName = deletion.RecordName, RecordType = deletion.RecordType }
+                });
+                deletionOwners.Add(deletion.RecordName);
+            }
 
             foreach (var item in pending.Items)
             {
@@ -82,7 +94,8 @@ public class CloudKitSyncEngine
             foreach (var record in response.Records ?? new List<CKRecord>())
             {
                 if (!owners.TryGetValue(record.RecordName, out var owner)
-                    && !linkOwners.ContainsKey(record.RecordName))
+                    && !linkOwners.ContainsKey(record.RecordName)
+                    && !deletionOwners.Contains(record.RecordName))
                     continue;
 
                 if (record.ServerErrorCode != null)
@@ -94,7 +107,11 @@ public class CloudKitSyncEngine
                     continue;
                 }
 
-                if (linkOwners.TryGetValue(record.RecordName, out var linkOwner))
+                if (deletionOwners.Contains(record.RecordName))
+                {
+                    await _repository.ConfirmDeletionUploadedAsync(record.RecordName, cancellationToken);
+                }
+                else if (linkOwners.TryGetValue(record.RecordName, out var linkOwner))
                 {
                     await _repository.ConfirmItemShelfUploadedAsync(
                         linkOwner.ItemId, linkOwner.ShelfId, record.RecordName,

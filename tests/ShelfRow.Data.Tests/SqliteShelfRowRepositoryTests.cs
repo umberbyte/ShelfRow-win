@@ -109,6 +109,28 @@ public class SqliteShelfRowRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteItem_PreservesCloudRecordDeletionUntilConfirmed()
+    {
+        await _repository.InitializeAsync();
+        var item = new Item
+        {
+            Title = "Cloud item",
+            RelativePath = "cloud.zip",
+            CloudKitRecordName = "ITEM-TO-DELETE"
+        };
+        await _repository.UpsertItemAsync(item, markPendingUpload: false);
+
+        await _repository.DeleteItemAsync(item.Id);
+
+        var pending = await _repository.GetPendingUploadsAsync();
+        Assert.Contains(pending.Deletions, deletion =>
+            deletion.RecordName == "ITEM-TO-DELETE" && deletion.RecordType == "CD_Item");
+
+        await _repository.ConfirmDeletionUploadedAsync("ITEM-TO-DELETE");
+        Assert.Empty((await _repository.GetPendingUploadsAsync()).Deletions);
+    }
+
+    [Fact]
     public async Task GetItemsForImportMerge_LoadsAllItemsAndShelfMemberships()
     {
         await _repository.InitializeAsync();

@@ -9,7 +9,7 @@
     mc:Ignorable="d"
     Title="ShelfRow">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -19,13 +19,13 @@
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
                 <!-- Left Pane: Sidebar -->
-                <ColumnDefinition Width="260" MinWidth="220" MaxWidth="360" />
+                <ColumnDefinition x:Name="SidebarColumn" Width="260" MinWidth="195" MaxWidth="360" />
                 <ColumnDefinition Width="Auto" />
                 <!-- Center Pane: Main Content -->
                 <ColumnDefinition Width="*" MinWidth="540" />
                 <ColumnDefinition Width="Auto" />
                 <!-- Right Pane: Inspector / Detail -->
-                <ColumnDefinition Width="320" MinWidth="280" MaxWidth="440" />
+                <ColumnDefinition x:Name="InspectorColumn" Width="320" MinWidth="240" MaxWidth="440" />
             </Grid.ColumnDefinitions>
 
             <!-- =================================================================== -->
@@ -39,13 +39,13 @@
                 </Grid.RowDefinitions>
 
                 <!-- App Header -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Padding="18,16,18,12" VerticalAlignment="Center">
+                <StackPanel x:Name="SidebarHeader" Grid.Row="0" Orientation="Horizontal" Spacing="10" Padding="18,16,18,12" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE82D;" FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                     <TextBlock Text="ShelfRow" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Sidebar Navigation List -->
-                <ScrollViewer Grid.Row="1" Padding="8,0,8,8">
+                <ScrollViewer x:Name="SidebarScroll" Grid.Row="1" Padding="8,0,8,8">
                     <StackPanel Spacing="16">
                         <!-- Section: Library -->
                         <StackPanel Spacing="2">
@@ -92,6 +92,7 @@
                                             <TextBlock Grid.Column="1" Text="{x:Bind Title}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                             <Grid.ContextFlyout>
                                                 <MenuFlyout>
+                                                    <MenuFlyoutItem Text="名前を変更..." Click="EditStandardShelf_Click" Tag="{x:Bind}" />
                                                     <MenuFlyoutItem Text="削除" Click="DeleteShelf_Click" Tag="{x:Bind}" />
                                                 </MenuFlyout>
                                             </Grid.ContextFlyout>
@@ -130,7 +131,7 @@
                 </ScrollViewer>
 
                 <!-- Sidebar Footer Controls -->
-                <Grid Grid.Row="2" Padding="12,8" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+                <Grid x:Name="SidebarFooter" Grid.Row="2" Padding="12,8" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button ToolTipService.ToolTip="シェルフを追加">
                             <FontIcon Glyph="&#xE710;" FontSize="13" />
@@ -164,7 +165,7 @@
                 <!-- Top Header & Filter Controls -->
                 <StackPanel Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
                     <!-- Row 1: Collection Title, Mode Switcher, Sort, Search -->
-                    <Grid Padding="20,14,20,10">
+                    <Grid x:Name="TopHeader" Padding="20,14,20,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -218,7 +219,7 @@
                     </Grid>
 
                     <!-- Row 2: Live Filters (Unread, Type, Rating, Clear) -->
-                    <StackPanel Spacing="8" Padding="20,0,20,12">
+                    <StackPanel x:Name="FilterPanel" Spacing="8" Padding="20,0,20,12">
                         <!-- Line 1: Unread & Book Types -->
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <!-- Unread Filter -->
@@ -327,6 +328,9 @@
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ItemViewModel">
                                     <StackPanel Spacing="6" HorizontalAlignment="Center" Width="110" Padding="0,4">
+                                        <StackPanel.ContextFlyout>
+                                            <MenuFlyout Opening="BookContextFlyout_Opening" />
+                                        </StackPanel.ContextFlyout>
                                         <!-- Cover Image (110x145, 4px CornerRadius) -->
                                         <Border Width="110" Height="145" CornerRadius="4"
                                                 Background="{ThemeResource LayerFillColorAltBrush}"
@@ -388,6 +392,9 @@
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:ItemViewModel">
                                 <Grid Padding="6,4">
+                                    <Grid.ContextFlyout>
+                                        <MenuFlyout Opening="BookContextFlyout_Opening" />
+                                    </Grid.ContextFlyout>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="24" />
                                         <ColumnDefinition Width="32" />
@@ -444,7 +451,7 @@
                 </StackPanel>
 
                 <!-- Selected item inspector view -->
-                <ScrollViewer Visibility="{x:Bind ViewModel.HasSelectedItem, Mode=OneWay}" Padding="16,20,16,24">
+                <ScrollViewer x:Name="InspectorScroll" Visibility="{x:Bind ViewModel.HasSelectedItem, Mode=OneWay}" Padding="16,20,16,24">
                     <StackPanel Spacing="14">
                         <!-- Big Cover Image (176x224, 10px CornerRadius, Shadow) -->
                         <Border Width="176" Height="224" CornerRadius="10"

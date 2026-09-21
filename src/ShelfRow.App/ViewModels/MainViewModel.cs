@@ -644,6 +644,20 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public async Task DeleteItemAsync(ItemViewModel itemViewModel, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _repository.DeleteItemAsync(itemViewModel.Id, cancellationToken);
+            StatusMessage = $"ライブラリから削除しました: {itemViewModel.Title}";
+            await RefreshBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"削除に失敗しました: {ex.Message}";
+        }
+    }
+
     private void OnItemModelChanged(Item item)
     {
         _ = Task.Run(async () =>
@@ -741,6 +755,39 @@ public class MainViewModel : INotifyPropertyChanged
         if (SelectedShelf?.Id == shelf.Id)
         {
             SelectAllBooksCollection();
+        }
+    }
+
+    public async Task SetItemShelfMembershipAsync(ItemViewModel itemViewModel, Shelf shelf, bool isMember)
+    {
+        if (shelf.IsSmart) return;
+
+        Item item = itemViewModel.Model;
+        bool alreadyMember = item.ShelfIds.Contains(shelf.Id);
+        if (alreadyMember == isMember) return;
+
+        if (isMember)
+            item.ShelfIds.Add(shelf.Id);
+        else
+            item.ShelfIds.Remove(shelf.Id);
+
+        try
+        {
+            await _repository.UpsertItemAsync(item);
+            StatusMessage = isMember
+                ? $"「{item.Title}」を「{shelf.Title}」に追加しました"
+                : $"「{item.Title}」を「{shelf.Title}」から外しました";
+
+            if (_selectedShelf?.Id == shelf.Id && !isMember)
+                await RefreshBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            if (isMember)
+                item.ShelfIds.Remove(shelf.Id);
+            else
+                item.ShelfIds.Add(shelf.Id);
+            StatusMessage = $"シェルフの更新に失敗しました: {ex.Message}";
         }
     }
 
@@ -971,7 +1018,7 @@ public class MainViewModel : INotifyPropertyChanged
                     libraryItemIds,
                     localStates,
                     progress,
-                    maxConcurrency: 4,
+                    maxConcurrency: Math.Clamp(Settings.ThumbnailConcurrency, 1, 32),
                     cancellationToken);
                 aggregateResult.TotalFoundInNas += res.TotalFoundInNas;
                 aggregateResult.Fetched += res.Fetched;

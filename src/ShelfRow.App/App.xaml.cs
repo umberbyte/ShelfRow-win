@@ -115,7 +115,9 @@ public partial class App : Application
                 thumbnailStorage,
                 dispatcherQueue,
                 repository: repository,
-                distributionRootProvider: () => settingsService.Current.ThumbnailDistributionRoot);
+                distributionRootProvider: () => settingsService.Current.ThumbnailAutoFetchEnabled
+                    ? settingsService.Current.ThumbnailDistributionRoot
+                    : null);
             var coverGenerator = new CoverGenerationService(
                 repository,
                 thumbnailStorage,

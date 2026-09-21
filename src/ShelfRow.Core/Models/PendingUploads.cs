@@ -9,7 +9,8 @@ public record PendingUploads(
     IReadOnlyList<Item> Items,
     IReadOnlyList<Shelf> Shelves,
     IReadOnlyList<Volume> Volumes,
-    IReadOnlyList<PendingItemShelfChange> ItemShelfChanges)
+    IReadOnlyList<PendingItemShelfChange> ItemShelfChanges,
+    IReadOnlyList<PendingCloudKitDeletion> Deletions)
 {
-    public int Count => Items.Count + Shelves.Count + Volumes.Count + ItemShelfChanges.Count;
+    public int Count => Items.Count + Shelves.Count + Volumes.Count + ItemShelfChanges.Count + Deletions.Count;
 }

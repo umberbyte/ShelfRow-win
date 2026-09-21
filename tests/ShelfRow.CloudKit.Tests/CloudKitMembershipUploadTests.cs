@@ -47,6 +47,33 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         Assert.Empty((await repository.GetPendingUploadsAsync()).ItemShelfChanges);
     }
 
+    [Fact]
+    public async Task SyncUp_SendsDeletedItemAndClearsDeletionQueue()
+    {
+        using var repository = new SqliteShelfRowRepository(_dbPath);
+        await repository.InitializeAsync();
+        var item = new Item
+        {
+            Title = "Deleted item",
+            RelativePath = "deleted.zip",
+            CloudKitRecordName = "ITEM-TO-DELETE"
+        };
+        await repository.UpsertItemAsync(item, markPendingUpload: false);
+        await repository.DeleteItemAsync(item.Id);
+
+        var handler = new EchoModifyHandler();
+        var client = new CloudKitClient(
+            new CloudKitConfiguration { ApiToken = "test", WebAuthToken = "test" },
+            new HttpClient(handler));
+        await new CloudKitSyncEngine(client, repository).SyncUpAsync();
+
+        Assert.Contains(handler.Requests.SelectMany(Operations), operation =>
+            operation.GetProperty("operationType").GetString() == "delete"
+            && operation.GetProperty("record").GetProperty("recordName").GetString() == "ITEM-TO-DELETE"
+            && operation.GetProperty("record").GetProperty("recordType").GetString() == "CD_Item");
+        Assert.Empty((await repository.GetPendingUploadsAsync()).Deletions);
+    }
+
     private static IEnumerable<JsonElement> Operations(JsonDocument request) =>
         request.RootElement.GetProperty("operations").EnumerateArray();
 
@@ -85,4 +112,3 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         }
     }
 }
-

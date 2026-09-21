@@ -39,6 +39,7 @@ public sealed partial class PreferencesWindow : Window
 
         LoadSettingsToUI();
         _isInitializing = false;
+        ApplyAppearance();
     }
 
     private void LoadSettingsToUI()
@@ -147,6 +148,20 @@ public sealed partial class PreferencesWindow : Window
 
         _settingsService.Save(_settings);
         _mainViewModel.ReloadSettings();
+        ApplyAppearance();
+    }
+
+    private void ApplyAppearance()
+    {
+        if (Content is FrameworkElement root)
+        {
+            root.RequestedTheme = _settings.AppearanceMode.ToLowerInvariant() switch
+            {
+                "light" => ElementTheme.Light,
+                "dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+        }
     }
 
     private void SettingChanged(object sender, RoutedEventArgs e)
@@ -221,7 +236,7 @@ public sealed partial class PreferencesWindow : Window
                 break;
             case "maintenance":
                 PageTitle.Text = "保守";
-                PageSubtitle.Text = "バックアップ、サムネイル配布、移行などのメンテナンス操作を行います。";
+                PageSubtitle.Text = "サムネイル配布や移行などのメンテナンス操作を行います。";
                 break;
         }
     }

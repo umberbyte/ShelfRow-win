@@ -128,6 +128,11 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 Value TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS PendingCloudKitDeletions (
+                RecordName TEXT PRIMARY KEY,
+                RecordType TEXT NOT NULL
+            );
+
             -- Device-local cover bookkeeping. Deliberately has no PendingUpload
             -- integration: these rows must never reach CloudKit.
             CREATE TABLE IF NOT EXISTS LocalCoverStates (
@@ -477,10 +482,20 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     public async Task DeleteItemAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM Items WHERE Id = @Id";
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO PendingCloudKitDeletions (RecordName, RecordType)
+            SELECT CloudKitRecordName, 'CDMR' FROM ItemShelves
+            WHERE ItemId = @Id AND CloudKitRecordName IS NOT NULL;
+            INSERT OR IGNORE INTO PendingCloudKitDeletions (RecordName, RecordType)
+            SELECT CloudKitRecordName, 'CD_Item' FROM Items
+            WHERE Id = @Id AND CloudKitRecordName IS NOT NULL;
+            DELETE FROM Items WHERE Id = @Id;";
         cmd.Parameters.AddWithValue("@Id", id.ToString("D"));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Guid>> GetAllItemIdsAsync(CancellationToken cancellationToken = default)
@@ -682,10 +697,20 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     public async Task DeleteShelfAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM Shelves WHERE Id = @Id";
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO PendingCloudKitDeletions (RecordName, RecordType)
+            SELECT CloudKitRecordName, 'CDMR' FROM ItemShelves
+            WHERE ShelfId = @Id AND CloudKitRecordName IS NOT NULL;
+            INSERT OR IGNORE INTO PendingCloudKitDeletions (RecordName, RecordType)
+            SELECT CloudKitRecordName, 'CD_Shelf' FROM Shelves
+            WHERE Id = @Id AND CloudKitRecordName IS NOT NULL;
+            DELETE FROM Shelves WHERE Id = @Id;";
         cmd.Parameters.AddWithValue("@Id", id.ToString("D"));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Volume>> GetVolumesAsync(CancellationToken cancellationToken = default)
@@ -1062,7 +1087,17 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
             }
         }
 
-        return new PendingUploads(items, shelves, volumes, itemShelfChanges);
+        var deletions = new List<PendingCloudKitDeletion>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT RecordName, RecordType FROM PendingCloudKitDeletions LIMIT @Limit";
+            cmd.Parameters.AddWithValue("@Limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                deletions.Add(new PendingCloudKitDeletion(reader.GetString(0), reader.GetString(1)));
+        }
+
+        return new PendingUploads(items, shelves, volumes, itemShelfChanges, deletions);
     }
 
     /// <summary>
@@ -1103,6 +1138,15 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
                 WHERE ItemId = @ItemId AND ShelfId = @ShelfId";
         cmd.Parameters.AddWithValue("@ItemId", itemId.ToString("D"));
         cmd.Parameters.AddWithValue("@ShelfId", shelfId.ToString("D"));
+        cmd.Parameters.AddWithValue("@RecordName", recordName);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task ConfirmDeletionUploadedAsync(string recordName, CancellationToken cancellationToken = default)
+    {
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM PendingCloudKitDeletions WHERE RecordName = @RecordName";
         cmd.Parameters.AddWithValue("@RecordName", recordName);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
