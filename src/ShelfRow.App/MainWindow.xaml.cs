@@ -96,6 +96,32 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void EditCover_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedItem is not { } selected
+            || _viewModel.CoverGenerator is not { } generator
+            || Content?.XamlRoot is not { } root)
+            return;
+
+        bool? changed = await CoverEditorDialog.ShowAsync(root, selected.Model, generator);
+        if (changed == true)
+        {
+            App.ImageLoader?.ClearMemoryCache();
+            App.ImageLoader?.InvalidateManifest();
+            selected.ReloadThumbnail();
+        }
+        else if (changed is null)
+        {
+            await new ContentDialog
+            {
+                Title = "表紙を編集できません",
+                Content = "この書籍は画像を含むZIP/CBZファイルとして開けませんでした。",
+                CloseButtonText = "OK",
+                XamlRoot = root
+            }.ShowAsync();
+        }
+    }
+
     private void ViewModel_OpenSettingsRequested(object? sender, EventArgs e)
     {
         OpenPreferencesWindow();

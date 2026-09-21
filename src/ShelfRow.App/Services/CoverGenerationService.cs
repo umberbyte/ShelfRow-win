@@ -14,6 +14,7 @@ namespace ShelfRow.App.Services;
 /// <summary>Generates a missing cover locally and publishes it when the NAS is available.</summary>
 public sealed class CoverGenerationService
 {
+    public sealed record CoverCandidates(string ArchivePath, IReadOnlyList<string> Entries);
     private readonly IShelfRowRepository _repository;
     private readonly ThumbnailStorageManager _thumbnails;
     private readonly ZipCoverExtractor _extractor = new();
@@ -71,6 +72,41 @@ public sealed class CoverGenerationService
         if (!await _extractor.ExtractFirstImageAsync(bookPath, localPath, cancellationToken))
             return false;
 
+        return await RegisterGeneratedCoverAsync(item, volume, cancellationToken);
+    }
+
+    public async Task<CoverCandidates?> GetCandidatesAsync(Item item, CancellationToken cancellationToken = default)
+    {
+        Volume? volume = item.VolumeId.HasValue
+            ? await _repository.GetVolumeByIdAsync(item.VolumeId.Value, cancellationToken)
+            : null;
+        string archivePath = _pathResolver.ResolveToWindowsPath(item, volume);
+        string extension = Path.GetExtension(archivePath);
+        if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
+            && !extension.Equals(".cbz", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var entries = await _extractor.ListImagesAsync(archivePath, cancellationToken);
+        return entries.Count == 0 ? null : new CoverCandidates(archivePath, entries);
+    }
+
+    public Task<byte[]?> ReadCandidateAsync(CoverCandidates candidates, string entry, CancellationToken cancellationToken = default) =>
+        _extractor.ReadImageAsync(candidates.ArchivePath, entry, cancellationToken);
+
+    public async Task<bool> ReplaceAsync(Item item, CoverCandidates candidates, string entry, CancellationToken cancellationToken = default)
+    {
+        string localPath = _thumbnails.GetLocalThumbnailPath(item.Id);
+        if (!await _extractor.ExtractImageAsync(candidates.ArchivePath, entry, localPath, cancellationToken))
+            return false;
+        Volume? volume = item.VolumeId.HasValue
+            ? await _repository.GetVolumeByIdAsync(item.VolumeId.Value, cancellationToken)
+            : null;
+        return await RegisterGeneratedCoverAsync(item, volume, cancellationToken);
+    }
+
+    private async Task<bool> RegisterGeneratedCoverAsync(Item item, Volume? volume, CancellationToken cancellationToken)
+    {
+        string localPath = _thumbnails.GetLocalThumbnailPath(item.Id);
+
         long bytes = new FileInfo(localPath).Length;
         item.CoverVersion = Math.Max(1, item.CoverVersion + 1);
         item.CoverBytes = bytes;
@@ -110,6 +146,7 @@ public sealed class CoverGenerationService
         }
 
         await _repository.UpsertLocalCoverStatesAsync(new[] { state }, cancellationToken);
+        _jobs.TryRemove(item.Id, out _);
         return true;
     }
 

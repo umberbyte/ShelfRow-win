@@ -457,6 +457,7 @@
                                 <Image Source="{x:Bind ViewModel.SelectedItem.ThumbnailImage, Mode=OneWay}" Stretch="UniformToFill" />
                             </Grid>
                         </Border>
+                        <Button Content="表紙を編集..." Click="EditCover_Click" HorizontalAlignment="Center" />
 
                         <!-- Item Title (18pt bold, max 2 lines) -->
                         <TextBlock Text="{x:Bind ViewModel.SelectedItem.Title, Mode=OneWay}"

@@ -109,6 +109,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<VolumeViewModel> Volumes { get; }
 
     public AppSettings Settings => _settingsService.Current;
+    public CoverGenerationService? CoverGenerator => _coverGenerator;
     public string AuthorFieldLabel => Settings.EffectiveAuthorLabel + ":";
     public string GenreFieldLabel => Settings.EffectiveGenreLabel + ":";
     public string RelationFieldLabel => Settings.EffectiveRelationLabel + ":";
