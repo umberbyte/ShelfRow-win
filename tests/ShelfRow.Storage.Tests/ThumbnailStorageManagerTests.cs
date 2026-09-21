@@ -27,6 +27,19 @@ public class ThumbnailStorageManagerTests : IDisposable
     }
 
     [Fact]
+    public void GetNasThumbnailPath_Returns256ShardLowerPrefixAndUpperGuid()
+    {
+        var id = Guid.Parse("c4a52301-1122-3344-5566-778899aabbcc");
+        string nasRoot = @"\\NAS\Books\ShelfRowThumbnails";
+        string path = _manager.GetNasThumbnailPath(nasRoot, id);
+
+        // Shard folder should be lowercase 2 letters: "c4"
+        // File name should be uppercase: "C4A52301-1122-3344-5566-778899AABBCC.jpg"
+        string expected = Path.Combine(nasRoot, "c4", "C4A52301-1122-3344-5566-778899AABBCC.jpg");
+        Assert.Equal(expected, path);
+    }
+
+    [Fact]
     public async Task MarkerReadAndWrite_PreservesMetadata()
     {
         string nasRoot = Path.Combine(_tempDir, ThumbnailStorageManager.DistributionFolderName);
@@ -39,6 +52,65 @@ public class ThumbnailStorageManagerTests : IDisposable
         Assert.Equal(ThumbnailStorageManager.SupportedFormatVersion, marker.FormatVersion);
         Assert.Equal(libId, marker.LibraryId);
         Assert.Equal("ShelfRow for Windows", marker.CreatedBy);
+    }
+
+    [Fact]
+    public async Task ManifestReadAndWrite_PreservesEntries()
+    {
+        string nasRoot = Path.Combine(_tempDir, ThumbnailStorageManager.DistributionFolderName);
+        var itemId1 = Guid.NewGuid();
+        var itemId2 = Guid.NewGuid();
+
+        var manifest = new ThumbnailDistributionManifest();
+        manifest.SetEntry(itemId1, version: 1, bytes: 45678);
+        manifest.SetEntry(itemId2, version: 2, bytes: 123456);
+
+        await _manager.WriteManifestAsync(nasRoot, manifest);
+        var loaded = await _manager.ReadManifestAsync(nasRoot);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(ThumbnailStorageManager.SupportedFormatVersion, loaded.FormatVersion);
+        Assert.Equal("ShelfRow for Windows", loaded.UpdatedBy);
+
+        var entry1 = loaded.GetEntry(itemId1);
+        Assert.NotNull(entry1);
+        Assert.Equal(1, entry1.Version);
+        Assert.Equal(45678, entry1.Bytes);
+
+        var entry2 = loaded.GetEntry(itemId2);
+        Assert.NotNull(entry2);
+        Assert.Equal(2, entry2.Version);
+        Assert.Equal(123456, entry2.Bytes);
+    }
+
+    [Fact]
+    public async Task CopyToAndFromNasDistribution_TransfersThumbnailCorrectly()
+    {
+        string nasRoot = Path.Combine(_tempDir, "NasShare", ThumbnailStorageManager.DistributionFolderName);
+        var itemId = Guid.NewGuid();
+
+        // 1. Create a mock local thumbnail file
+        string localPath = _manager.GetLocalThumbnailPath(itemId);
+        byte[] dummyData = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x01, 0x02, 0x03 };
+        await File.WriteAllBytesAsync(localPath, dummyData);
+
+        // 2. Upload to NAS
+        await _manager.CopyToNasDistributionAsync(nasRoot, itemId);
+
+        string expectedNasPath = _manager.GetNasThumbnailPath(nasRoot, itemId);
+        Assert.True(File.Exists(expectedNasPath), "NAS thumbnail file should exist in the 256-shard directory");
+        byte[] nasBytes = await File.ReadAllBytesAsync(expectedNasPath);
+        Assert.Equal(dummyData, nasBytes);
+
+        // 3. Delete local and download back
+        File.Delete(localPath);
+        Assert.False(_manager.HasLocalThumbnail(itemId));
+
+        bool copied = await _manager.CopyFromNasDistributionAsync(nasRoot, itemId);
+        Assert.True(copied);
+        Assert.True(_manager.HasLocalThumbnail(itemId));
+        byte[] downloadedBytes = await File.ReadAllBytesAsync(localPath);
+        Assert.Equal(dummyData, downloadedBytes);
     }
 
     public void Dispose()
