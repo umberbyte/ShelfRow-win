@@ -94,7 +94,10 @@ public class ThumbnailImageLoader
         }
         finally
         {
-            _inFlightTasks.TryRemove(key, out _);
+            // A waiter for the previous job may finish after a new load has
+            // already claimed the same key. Never remove that newer job.
+            if (_inFlightTasks.TryGetValue(key, out var current) && ReferenceEquals(current, lazy))
+                _inFlightTasks.TryRemove(key, out _);
         }
     }
 
@@ -105,6 +108,7 @@ public class ThumbnailImageLoader
         CancellationToken cancellationToken)
     {
         string localPath = _storageManager.GetLocalThumbnailPath(itemId);
+        bool nasAttempted = false;
 
         if (target is not null && !string.IsNullOrWhiteSpace(nasDistributionRoot))
         {
@@ -129,27 +133,34 @@ public class ThumbnailImageLoader
                         && state.AttemptedVersion == target.Version
                         && state.Attempts >= 3
                         && state.LastErrorCode != 0)
-                        return null;
+                    {
+                        nasAttempted = true;
+                    }
+                    else
+                    {
+                        nasAttempted = true;
 
-                    try
-                    {
-                        bool copied = await _storageManager.CopyFromNasDistributionAsync(nasDistributionRoot, itemId, cancellationToken);
-                        long copiedBytes = copied && File.Exists(localPath) ? new FileInfo(localPath).Length : 0;
-                        if (!copied || copiedBytes == 0 || (target.Bytes > 0 && copiedBytes != target.Bytes))
+                        try
                         {
-                            await RecordFailureAsync(state, itemId, target.Version, copied ? 13 : 2, cancellationToken);
-                            return null;
+                            bool copied = await _storageManager.CopyFromNasDistributionAsync(nasDistributionRoot, itemId, cancellationToken);
+                            long copiedBytes = copied && File.Exists(localPath) ? new FileInfo(localPath).Length : 0;
+                            if (!copied || copiedBytes == 0 || (target.Bytes > 0 && copiedBytes != target.Bytes))
+                            {
+                                await RecordFailureAsync(state, itemId, target.Version, copied ? 13 : 2, cancellationToken);
+                            }
+                            else
+                            {
+                                await RecordSuccessAsync(itemId, target.Version, copiedBytes, cancellationToken);
+                            }
                         }
-                        await RecordSuccessAsync(itemId, target.Version, copiedBytes, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        await RecordFailureAsync(state, itemId, target.Version, ex.HResult, cancellationToken);
-                        return null;
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            await RecordFailureAsync(state, itemId, target.Version, ex.HResult, cancellationToken);
+                        }
                     }
                 }
             }
@@ -159,7 +170,7 @@ public class ThumbnailImageLoader
         if (!File.Exists(localPath))
         {
             // Tier 3: Fetch from NAS Distribution Folder if available
-            if (target is not null && !string.IsNullOrWhiteSpace(nasDistributionRoot))
+            if (!nasAttempted && target is not null && !string.IsNullOrWhiteSpace(nasDistributionRoot))
             {
                 bool copied = await _storageManager.CopyFromNasDistributionAsync(nasDistributionRoot, itemId, cancellationToken);
                 if (!copied)

@@ -34,11 +34,22 @@ public sealed class CoverGenerationService
         _configuredRoot = configuredRoot;
     }
 
-    public Task<bool> GenerateAsync(Item item, CancellationToken cancellationToken = default)
+    public async Task<bool> GenerateAsync(Item item, CancellationToken cancellationToken = default)
     {
-        return _jobs.GetOrAdd(item.Id, _ => new Lazy<Task<bool>>(
+        var job = _jobs.GetOrAdd(item.Id, _ => new Lazy<Task<bool>>(
             () => GenerateLimitedAsync(item, cancellationToken),
-            LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+            LazyThreadSafetyMode.ExecutionAndPublication));
+        try
+        {
+            return await job.Value;
+        }
+        finally
+        {
+            // Failed, cancelled and unsupported jobs must be retryable. Remove only
+            // this Lazy so a later job cannot be removed by another waiter finishing.
+            if (_jobs.TryGetValue(item.Id, out var current) && ReferenceEquals(current, job))
+                _jobs.TryRemove(item.Id, out _);
+        }
     }
 
     private async Task<bool> GenerateLimitedAsync(Item item, CancellationToken cancellationToken)
@@ -108,36 +119,50 @@ public sealed class CoverGenerationService
         string localPath = _thumbnails.GetLocalThumbnailPath(item.Id);
 
         long bytes = new FileInfo(localPath).Length;
-        item.CoverVersion = Math.Max(1, item.CoverVersion + 1);
-        item.CoverBytes = bytes;
-        await _repository.UpsertItemAsync(item, cancellationToken: cancellationToken);
-
         string? root = _configuredRoot();
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             root = ThumbnailStorageManager.FindDistributionRoot(volume?.WindowsMountPath);
 
+        var previous = await _repository.GetLocalCoverStateAsync(item.Id, cancellationToken);
         var state = new LocalCoverState
         {
             ItemId = item.Id,
-            Version = item.CoverVersion,
+            Version = previous?.Version ?? 0,
             Bytes = bytes,
             UpdatedAt = DateTime.UtcNow,
-            PendingUpload = true
+            PendingUpload = true,
+            Attempts = 0,
+            AttemptedVersion = previous?.AttemptedVersion ?? 0,
+            LastErrorCode = 0
         };
+
+        // Persist the retry marker before touching the NAS. A share can disappear
+        // after Directory.Exists succeeds, and that must not strand the new cover.
+        // The distribution manifest, not Item.CoverVersion, owns NAS revisions;
+        // changing the Item here would create needless CloudKit traffic.
+        await _repository.UpsertLocalCoverStatesAsync(new[] { state }, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(root))
         {
             await _publishLock.WaitAsync(cancellationToken);
             try
             {
-                await _thumbnails.CopyToNasDistributionAsync(root, item.Id, cancellationToken);
-                var manifest = await _thumbnails.ReadManifestAsync(root, cancellationToken)
-                               ?? new ThumbnailDistributionManifest();
-                int version = (manifest.GetEntry(item.Id)?.Version ?? 0) + 1;
-                manifest.SetEntry(item.Id, version, bytes);
-                await _thumbnails.WriteManifestAsync(root, manifest, cancellationToken);
-                state.Version = version;
-                state.PendingUpload = false;
+                try
+                {
+                    await _thumbnails.CopyToNasDistributionAsync(root, item.Id, cancellationToken);
+                    var manifest = await _thumbnails.ReadManifestAsync(root, cancellationToken)
+                                   ?? new ThumbnailDistributionManifest();
+                    int version = (manifest.GetEntry(item.Id)?.Version ?? 0) + 1;
+                    manifest.SetEntry(item.Id, version, bytes);
+                    await _thumbnails.WriteManifestAsync(root, manifest, cancellationToken);
+                    state.Version = version;
+                    state.PendingUpload = false;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // The local cover is complete. Keep PendingUpload so the next
+                    // maintenance sync retries after the share is reachable again.
+                }
             }
             finally
             {
@@ -146,7 +171,6 @@ public sealed class CoverGenerationService
         }
 
         await _repository.UpsertLocalCoverStatesAsync(new[] { state }, cancellationToken);
-        _jobs.TryRemove(item.Id, out _);
         return true;
     }
 
@@ -182,7 +206,7 @@ public sealed class CoverGenerationService
                     state.UpdatedAt = DateTime.UtcNow;
                     completed.Add(state);
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // A temporarily unavailable NAS is normal; leave it pending.
                 }
