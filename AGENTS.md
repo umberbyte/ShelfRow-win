@@ -53,8 +53,8 @@
   * Windows 実機での WinUI 3 アプリ起動・ビルド検証（`ShelfRow.App` 起動、SQLite 初期化、ウィンドウ表示確認）
   * VS Code / Antigravity IDE での実行・デバッグ構成整備（`launch.json`, `tasks.json`, `run.ps1`）
 * **次のタスク**:
-  * サムネイル画像非同期ロード用のキャッシュ・パイプライン最適化
-  * Windows 資格情報マネージャー（Credential Locker / DPAPI）による Apple ID WebAuth トークンのセキュア保管
+  * [`ToDo.md`](file:///c:/Users/gsuga/src/ShelfRow-win/ToDo.md) を参照（mac 版と突き合わせた監査結果。優先度順）。
+    最優先は「再インポートで蔵書が倍増する」「mac で更新した表紙が Windows に反映されない」の2件。
 
 ---
 
