@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShelfRow.Core\ShelfRow.Core.csproj" />
     <ProjectReference Include="..\..\src\ShelfRow.CloudKit\ShelfRow.CloudKit.csproj" />
+    <ProjectReference Include="..\..\src\ShelfRow.Data\ShelfRow.Data.csproj" />
   </ItemGroup>
 
 </Project>
