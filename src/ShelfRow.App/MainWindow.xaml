@@ -528,7 +528,8 @@
                                     -1 for "no rating" and rounds a 0 up to 1, writing
                                     that back, so selecting an unrated book gave it a star.
                                 -->
-                                <RatingControl Grid.Column="1" Value="{x:Bind ViewModel.SelectedItem.RatingValue, Mode=TwoWay}"
+                                <RatingControl x:Name="InspectorRatingControl" Grid.Column="1"
+                                               Value="{x:Bind ViewModel.SelectedItem.RatingValue, Mode=TwoWay}"
                                                MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left">
                                     <RatingControl.Resources>
                                         <SolidColorBrush x:Key="RatingControlSelectedForeground" Color="#EAB308" />
