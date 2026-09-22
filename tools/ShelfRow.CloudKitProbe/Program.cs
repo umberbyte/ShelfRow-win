@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ShelfRow.CloudKit;
@@ -12,6 +13,18 @@ const string CallbackPrefix = "http://localhost:49152/";
 // and reports the record types and fields the Mac app actually writes.
 //
 //   dotnet run --project tools/ShelfRow.CloudKitProbe -- <apiToken> [development|production]
+
+if (args.Length > 0 && args[0] == "--app-sync-up")
+{
+    string environment = args.Length > 1 ? args[1] : "production";
+    return await RunAppSyncUpAsync(environment);
+}
+
+if (args.Length > 0 && args[0] == "--app-verify-download")
+{
+    string environment = args.Length > 1 ? args[1] : "production";
+    return await RunAppVerifyDownloadAsync(environment);
+}
 
 if (args.Length >= 2 && args[0] == "--analyze")
 {
@@ -185,6 +198,141 @@ static async Task<int> RunSyncAsync(CloudKitClient client, CloudKitConfiguration
     Console.WriteLine();
     Console.WriteLine($"Database written to {dbPath}");
     return 0;
+}
+
+// Exercises the same pending-upload queue as the desktop app while reusing its
+// environment-scoped DPAPI credential. This avoids opening a second browser sign-in
+// flow merely to diagnose a failed upload.
+static async Task<int> RunAppSyncUpAsync(string environment)
+{
+    environment = environment.Equals("production", StringComparison.OrdinalIgnoreCase)
+        ? "production"
+        : "development";
+
+    string appData = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ShelfRow");
+    string dbPath = Path.Combine(appData, "shelfrow.db");
+    if (!File.Exists(dbPath))
+    {
+        Console.Error.WriteLine($"ShelfRow database not found: {dbPath}");
+        return 1;
+    }
+
+    string credentialKey = $"{CloudKitAccount.WebAuthTokenKey}:{environment}";
+    string? webAuthToken = ReadDpapiSecret(Path.Combine(appData, "Security"), credentialKey);
+    if (string.IsNullOrWhiteSpace(webAuthToken))
+    {
+        Console.Error.WriteLine($"No saved {environment} CloudKit sign-in was found.");
+        return 1;
+    }
+
+    var config = new CloudKitConfiguration
+    {
+        ApiToken = CloudKitConfiguration.BuiltInApiTokenFor(environment),
+        Environment = environment,
+        WebAuthToken = webAuthToken
+    };
+    var client = new CloudKitClient(config);
+    client.WebAuthTokenRenewed += token =>
+        WriteDpapiSecret(Path.Combine(appData, "Security"), credentialKey, token);
+
+    using var repository = new SqliteShelfRowRepository(dbPath);
+    await repository.InitializeAsync();
+    var engine = new CloudKitSyncEngine(client, repository);
+
+    try
+    {
+        var result = await engine.SyncUpAsync();
+        Console.WriteLine($"Uploaded: {result.Uploaded}; conflicts: {result.Conflicted}; failed: {result.Failed}");
+        return result.Failed == 0 ? 0 : 2;
+    }
+    catch (CloudKitException ex)
+    {
+        Console.Error.WriteLine($"FAILED: {ex.Message}");
+        return 1;
+    }
+}
+
+// Downloads the whole live zone into a disposable database. Starting without a sync
+// token proves what currently exists on the server rather than what a local cache says.
+static async Task<int> RunAppVerifyDownloadAsync(string environment)
+{
+    environment = environment.Equals("production", StringComparison.OrdinalIgnoreCase)
+        ? "production"
+        : "development";
+
+    string appData = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ShelfRow");
+    string credentialKey = $"{CloudKitAccount.WebAuthTokenKey}:{environment}";
+    string? webAuthToken = ReadDpapiSecret(Path.Combine(appData, "Security"), credentialKey);
+    if (string.IsNullOrWhiteSpace(webAuthToken))
+    {
+        Console.Error.WriteLine($"No saved {environment} CloudKit sign-in was found.");
+        return 1;
+    }
+
+    var config = new CloudKitConfiguration
+    {
+        ApiToken = CloudKitConfiguration.BuiltInApiTokenFor(environment),
+        Environment = environment,
+        WebAuthToken = webAuthToken
+    };
+    var client = new CloudKitClient(config);
+    client.WebAuthTokenRenewed += token =>
+        WriteDpapiSecret(Path.Combine(appData, "Security"), credentialKey, token);
+
+    string dbPath = Path.Combine(Path.GetTempPath(), $"shelfrow-verify-{Guid.NewGuid():N}.db");
+    try
+    {
+        using var repository = new SqliteShelfRowRepository(dbPath);
+        await repository.InitializeAsync();
+        var engine = new CloudKitSyncEngine(client, repository);
+        var progress = new Progress<int>(count =>
+        {
+            if (count % 2000 == 0) Console.WriteLine($"Processed {count:N0} records...");
+        });
+        var result = await engine.SyncDownAsync(progress);
+        Console.WriteLine($"Server snapshot: items={result.Items}, shelves={result.Shelves}, volumes={result.Volumes}, links={result.Links}, deletions={result.Deletions}");
+        return 0;
+    }
+    catch (CloudKitException ex)
+    {
+        Console.Error.WriteLine($"FAILED: {ex.Message}");
+        return 1;
+    }
+    finally
+    {
+        foreach (string path in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
+        {
+            try { File.Delete(path); } catch { }
+        }
+    }
+}
+
+static string? ReadDpapiSecret(string directory, string key)
+{
+    string path = SecretPath(directory, key);
+    if (!File.Exists(path)) return null;
+
+    byte[] encrypted = File.ReadAllBytes(path);
+    byte[] plain = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+    return Encoding.UTF8.GetString(plain);
+}
+
+static void WriteDpapiSecret(string directory, string key, string secret)
+{
+    Directory.CreateDirectory(directory);
+    byte[] plain = Encoding.UTF8.GetBytes(secret);
+    byte[] encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+    File.WriteAllBytes(SecretPath(directory, key), encrypted);
+}
+
+static string SecretPath(string directory, string key)
+{
+    string fileName = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ".dat";
+    return Path.Combine(directory, fileName);
 }
 
 static void Summarize(List<CKRecord> records)

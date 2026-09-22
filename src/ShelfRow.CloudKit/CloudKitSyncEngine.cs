@@ -39,6 +39,7 @@ public class CloudKitSyncEngine
 
         while (true)
         {
+            int batchUploaded = 0;
             var pending = await _repository.GetPendingUploadsAsync(ModifyBatchSize, cancellationToken);
             if (pending.Count == 0)
                 break;
@@ -127,13 +128,15 @@ public class CloudKitSyncEngine
                     await _repository.ConfirmUploadedAsync(owner.Table, owner.Id, record.RecordName, record.RecordChangeTag, cancellationToken);
                 }
                 uploaded++;
+                batchUploaded++;
             }
 
             progress?.Report(uploaded);
 
-            // Everything refused stays flagged, so without this the same batch would be
-            // retried forever.
-            if (uploaded == 0)
+            // Everything refused stays flagged for the following download/conflict
+            // resolution. Retrying a partially successful batch here would immediately
+            // select those same rows again and could loop forever.
+            if (batchUploaded < request.Operations.Count)
                 break;
         }
 

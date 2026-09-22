@@ -77,6 +77,43 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
         Assert.Empty((await repository.GetPendingUploadsAsync()).Deletions);
     }
 
+    [Fact]
+    public async Task SyncUp_StopsWhenOnlyPreviouslyFailedRowsRemainAfterPartialSuccess()
+    {
+        using var repository = new SqliteShelfRowRepository(_dbPath);
+        await repository.InitializeAsync();
+        var item = new Item
+        {
+            Title = "Pending item",
+            RelativePath = "pending.zip",
+            CloudKitRecordName = "ITEM-PENDING",
+            CloudKitChangeTag = "v1"
+        };
+        await repository.UpsertItemAsync(item);
+
+        var deleted = new Item
+        {
+            Title = "Deleted item",
+            RelativePath = "deleted.zip",
+            CloudKitRecordName = "ITEM-DELETED"
+        };
+        await repository.UpsertItemAsync(deleted, markPendingUpload: false);
+        await repository.DeleteItemAsync(deleted.Id);
+
+        var handler = new PartialFailureHandler();
+        var client = new CloudKitClient(
+            new CloudKitConfiguration { ApiToken = "test", WebAuthToken = "test" },
+            new HttpClient(handler));
+
+        var result = await new CloudKitSyncEngine(client, repository).SyncUpAsync();
+
+        Assert.Equal(1, handler.RequestCount);
+        Assert.Equal(1, result.Uploaded);
+        Assert.Equal(1, result.Conflicted);
+        Assert.Empty((await repository.GetPendingUploadsAsync()).Deletions);
+        Assert.Single((await repository.GetPendingUploadsAsync()).Items);
+    }
+
     private static IEnumerable<JsonElement> Operations(JsonDocument request) =>
         request.RootElement.GetProperty("operations").EnumerateArray();
 
@@ -113,6 +150,28 @@ public sealed class CloudKitMembershipUploadTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(response, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private sealed class PartialFailureHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            var records = Operations(document).Select(operation =>
+            {
+                string recordName = operation.GetProperty("record").GetProperty("recordName").GetString()!;
+                return recordName == "ITEM-PENDING"
+                    ? new { recordName, recordChangeTag = (string?)null, serverErrorCode = (string?)"CONFLICT", reason = (string?)"stale" }
+                    : new { recordName, recordChangeTag = (string?)"server-v2", serverErrorCode = (string?)null, reason = (string?)null };
+            });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { records }), Encoding.UTF8, "application/json")
             };
         }
     }
