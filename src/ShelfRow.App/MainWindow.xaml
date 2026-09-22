@@ -529,7 +529,14 @@
                                     that back, so selecting an unrated book gave it a star.
                                 -->
                                 <RatingControl Grid.Column="1" Value="{x:Bind ViewModel.SelectedItem.RatingValue, Mode=TwoWay}"
-                                               MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left" />
+                                               MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left">
+                                    <RatingControl.Resources>
+                                        <SolidColorBrush x:Key="RatingControlSelectedForeground" Color="#EAB308" />
+                                        <SolidColorBrush x:Key="RatingControlPointerOverSelectedForeground" Color="#FACC15" />
+                                        <SolidColorBrush x:Key="RatingControlPlaceholderForeground" Color="#EAB308" />
+                                        <SolidColorBrush x:Key="RatingControlPointerOverPlaceholderForeground" Color="#FACC15" />
+                                    </RatingControl.Resources>
+                                </RatingControl>
                             </Grid>
 
                             <!-- Keyword A -->
