@@ -234,54 +234,66 @@
 
                             <TextBlock Text="種別:" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0" />
 
-                            <Button Content="すべて" Click="FilterTypeAll_Click" Padding="8,3" FontSize="12" CornerRadius="4" />
-                            <Button Click="FilterType0_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            <ToggleButton Content="すべて" IsChecked="{x:Bind ViewModel.IsTypeFilterAll, Mode=OneWay}"
+                                          Click="FilterTypeAll_Click" Padding="8,3" FontSize="12" CornerRadius="4" />
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType0Selected, Mode=OneWay}"
+                                          Click="FilterType0_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EAB308" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName0, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
-                            <Button Click="FilterType1_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            </ToggleButton>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType1Selected, Mode=OneWay}"
+                                          Click="FilterType1_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#3B82F6" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName1, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
-                            <Button Click="FilterType2_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            </ToggleButton>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType2Selected, Mode=OneWay}"
+                                          Click="FilterType2_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#22C55E" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName2, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
-                            <Button Click="FilterType3_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            </ToggleButton>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType3Selected, Mode=OneWay}"
+                                          Click="FilterType3_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE82D;" FontSize="12" Foreground="#EC4899" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName3, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
-                            <Button Click="FilterType4_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            </ToggleButton>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType4Selected, Mode=OneWay}"
+                                          Click="FilterType4_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE8A5;" FontSize="12" Foreground="#9CA3AF" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName4, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
-                            <Button Click="FilterType5_Click" Padding="8,3" FontSize="12" CornerRadius="4">
+                            </ToggleButton>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsType5Selected, Mode=OneWay}"
+                                          Click="FilterType5_Click" Padding="8,3" FontSize="12" CornerRadius="4">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE8B2;" FontSize="12" Foreground="#A855F7" />
                                     <TextBlock Text="{x:Bind ViewModel.TypeName5, Mode=OneWay}" FontSize="12" />
                                 </StackPanel>
-                            </Button>
+                            </ToggleButton>
                         </StackPanel>
 
                         <!-- Line 2: Rating Stars & Clear -->
                         <Grid>
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <TextBlock Text="評価:" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                <Button Content="★1" Click="FilterRating1_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
-                                <Button Content="★2" Click="FilterRating2_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
-                                <Button Content="★3" Click="FilterRating3_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
-                                <Button Content="★4" Click="FilterRating4_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
-                                <Button Content="★5" Click="FilterRating5_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <ToggleButton Content="★1" IsChecked="{x:Bind ViewModel.IsRating1Selected, Mode=OneWay}"
+                                              Click="FilterRating1_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <ToggleButton Content="★2" IsChecked="{x:Bind ViewModel.IsRating2Selected, Mode=OneWay}"
+                                              Click="FilterRating2_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <ToggleButton Content="★3" IsChecked="{x:Bind ViewModel.IsRating3Selected, Mode=OneWay}"
+                                              Click="FilterRating3_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <ToggleButton Content="★4" IsChecked="{x:Bind ViewModel.IsRating4Selected, Mode=OneWay}"
+                                              Click="FilterRating4_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
+                                <ToggleButton Content="★5" IsChecked="{x:Bind ViewModel.IsRating5Selected, Mode=OneWay}"
+                                              Click="FilterRating5_Click" Padding="6,2" FontSize="12" CornerRadius="4" />
                             </StackPanel>
 
                             <Button Content="フィルタをクリア" Click="ClearFilters_Click" HorizontalAlignment="Right" Padding="10,3" FontSize="11" />
