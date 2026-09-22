@@ -382,9 +382,23 @@
                               DoubleTapped="BookList_DoubleTapped">
                         <ListView.Header>
                             <Grid Padding="12,6" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+                                <Grid.Resources>
+                                    <Style x:Key="ColumnHeaderButtonStyle" TargetType="Button">
+                                        <Setter Property="MinHeight" Value="24" />
+                                        <Setter Property="Padding" Value="0,2" />
+                                        <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="CornerRadius" Value="3" />
+                                        <Setter Property="FontSize" Value="11" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Style>
+                                </Grid.Resources>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="24" />
-                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="56" />
                                     <ColumnDefinition Width="*" MinWidth="180" />
                                     <ColumnDefinition Width="80" />
                                     <ColumnDefinition Width="140" />
@@ -392,12 +406,18 @@
                                     <ColumnDefinition Width="90" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="" />
-                                <TextBlock Grid.Column="1" Text="種別" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Grid.Column="2" Text="タイトル" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Grid.Column="3" Text="レート" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Grid.Column="4" Text="作者" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Grid.Column="5" Text="ジャンル" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Grid.Column="6" Text="登録日" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Button Grid.Column="1" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.BookTypeSortHeader, Mode=OneWay}" Click="SortByBookType_Click" />
+                                <Button Grid.Column="2" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.TitleSortHeader, Mode=OneWay}" Click="SortByTitle_Click" />
+                                <Button Grid.Column="3" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.RatingSortHeader, Mode=OneWay}" Click="SortByRating_Click" />
+                                <Button Grid.Column="4" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.AuthorSortHeader, Mode=OneWay}" Click="SortByAuthor_Click" />
+                                <Button Grid.Column="5" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.GenreSortHeader, Mode=OneWay}" Click="SortByGenre_Click" />
+                                <Button Grid.Column="6" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.AddedDateSortHeader, Mode=OneWay}" Click="SortByAddedDate_Click" />
                             </Grid>
                         </ListView.Header>
 
@@ -409,7 +429,7 @@
                                     </Grid.ContextFlyout>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="24" />
-                                        <ColumnDefinition Width="32" />
+                                        <ColumnDefinition Width="56" />
                                         <ColumnDefinition Width="*" MinWidth="180" />
                                         <ColumnDefinition Width="80" />
                                         <ColumnDefinition Width="140" />

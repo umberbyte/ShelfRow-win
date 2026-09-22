@@ -139,7 +139,8 @@ public class MainViewModel : INotifyPropertyChanged
             nameof(SearchAuthorLabel), nameof(SearchGenreLabel), nameof(SearchRelationLabel),
             nameof(SearchKeywordALabel), nameof(SearchKeywordBLabel),
             nameof(TypeName0), nameof(TypeName1), nameof(TypeName2),
-            nameof(TypeName3), nameof(TypeName4), nameof(TypeName5), nameof(SortKeyLabel)
+            nameof(TypeName3), nameof(TypeName4), nameof(TypeName5), nameof(SortKeyLabel),
+            nameof(AuthorSortHeader), nameof(GenreSortHeader)
         }) OnPropertyChanged(property);
         Stamps.Clear();
         foreach (string stamp in ParseStamps(Settings.StampsList)) Stamps.Add(stamp);
@@ -238,6 +239,7 @@ public class MainViewModel : INotifyPropertyChanged
                 _settingsService.Save();
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(SortKeyLabel));
+                NotifySortHeaderProperties();
                 ApplyFilterAndSort();
             }
         }
@@ -255,6 +257,7 @@ public class MainViewModel : INotifyPropertyChanged
                 _settingsService.Save();
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(SortDirectionGlyph));
+                NotifySortHeaderProperties();
                 ApplyFilterAndSort();
             }
         }
@@ -264,12 +267,34 @@ public class MainViewModel : INotifyPropertyChanged
 
     public string SortKeyLabel => SortKey switch
     {
+        "BookType" => "種別",
         "Rating" => "レート",
         "Author" => Settings.EffectiveAuthorLabel,
+        "Genre" => Settings.EffectiveGenreLabel,
         "AddedDate" => "登録日",
         "Pages" => "ページ数",
         _ => "タイトル"
     };
+
+    public string BookTypeSortHeader => SortHeader("種別", "BookType");
+    public string TitleSortHeader => SortHeader("タイトル", "Title");
+    public string RatingSortHeader => SortHeader("レート", "Rating");
+    public string AuthorSortHeader => SortHeader(Settings.EffectiveAuthorLabel, "Author");
+    public string GenreSortHeader => SortHeader(Settings.EffectiveGenreLabel, "Genre");
+    public string AddedDateSortHeader => SortHeader("登録日", "AddedDate");
+
+    private string SortHeader(string label, string key) =>
+        SortKey == key ? $"{label} {(SortAscending ? "▲" : "▼")}" : label;
+
+    private void NotifySortHeaderProperties()
+    {
+        OnPropertyChanged(nameof(BookTypeSortHeader));
+        OnPropertyChanged(nameof(TitleSortHeader));
+        OnPropertyChanged(nameof(RatingSortHeader));
+        OnPropertyChanged(nameof(AuthorSortHeader));
+        OnPropertyChanged(nameof(GenreSortHeader));
+        OnPropertyChanged(nameof(AddedDateSortHeader));
+    }
 
     public void SetViewMode(bool isGrid)
     {
@@ -591,8 +616,10 @@ public class MainViewModel : INotifyPropertyChanged
         // Sorting
         query = SortKey switch
         {
+            "BookType" => SortAscending ? query.OrderBy(i => i.BookType).ThenBy(i => i.Title) : query.OrderByDescending(i => i.BookType).ThenBy(i => i.Title),
             "Rating" => SortAscending ? query.OrderBy(i => i.Rating).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Rating).ThenBy(i => i.Title),
             "Author" => SortAscending ? query.OrderBy(i => i.Author).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Author).ThenBy(i => i.Title),
+            "Genre" => SortAscending ? query.OrderBy(i => i.Genre).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Genre).ThenBy(i => i.Title),
             "AddedDate" => SortAscending ? query.OrderBy(i => i.AddedDate) : query.OrderByDescending(i => i.AddedDate),
             "Pages" => SortAscending ? query.OrderBy(i => i.Pages) : query.OrderByDescending(i => i.Pages),
             _ => SortAscending ? query.OrderBy(i => i.Title) : query.OrderByDescending(i => i.Title)

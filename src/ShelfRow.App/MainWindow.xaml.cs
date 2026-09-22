@@ -563,9 +563,11 @@ public sealed partial class MainWindow : Window
         _viewModel?.SetViewMode(true);
     }
 
+    private void SortByBookType_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("BookType");
     private void SortByTitle_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Title");
     private void SortByRating_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Rating");
     private void SortByAuthor_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Author");
+    private void SortByGenre_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Genre");
     private void SortByAddedDate_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("AddedDate");
     private void SortByPages_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Pages");
 
