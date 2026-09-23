@@ -37,4 +37,16 @@ public class LibraryListColumnsTests
     {
         Assert.Equal(expected, LibraryListColumns.ClampWidth(LibraryListColumn.Author, input));
     }
+
+    [Fact]
+    public void WindowsRatingColumn_DefaultWidthFitsFiveNativeStars()
+    {
+        Assert.Equal(120, LibraryListColumns.DefaultWidth(LibraryListColumn.Rating));
+    }
+
+    [Fact]
+    public void NewSettings_ShowLastReadDateByDefault()
+    {
+        Assert.Contains("lastReadDate", new AppSettings().ListVisibleColumns);
+    }
 }

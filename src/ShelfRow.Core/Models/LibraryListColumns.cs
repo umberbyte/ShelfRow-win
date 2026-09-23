@@ -118,7 +118,9 @@ public static class LibraryListColumns
     {
         LibraryListColumn.Unread or LibraryListColumn.BookType => 44,
         LibraryListColumn.Title => null,
-        LibraryListColumn.Rating => 92,
+        // WinUI's standard RatingControl needs about 24 px per star. Unlike the
+        // surrounding text it does not shrink with our compact layout scale.
+        LibraryListColumn.Rating => 120,
         LibraryListColumn.Author => 120,
         LibraryListColumn.Genre or LibraryListColumn.Relation => 90,
         LibraryListColumn.KeywordA or LibraryListColumn.KeywordB => 100,

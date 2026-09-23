@@ -102,6 +102,9 @@ public sealed class LibraryListLayout : INotifyPropertyChanged
         if (!_logicalWidths.ContainsKey(column) && LibraryListColumns.DefaultWidth(column) is null)
             return new GridLength(1, GridUnitType.Star);
 
-        return new GridLength(LogicalWidth(column) * _scale);
+        // RatingControl keeps its native star size in compact mode, so shrinking
+        // only its column clips the fourth and fifth stars.
+        double scale = column == LibraryListColumn.Rating ? 1 : _scale;
+        return new GridLength(LogicalWidth(column) * scale);
     }
 }

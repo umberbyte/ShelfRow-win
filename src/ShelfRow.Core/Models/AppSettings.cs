@@ -97,7 +97,8 @@ public class AppSettings
     public bool MainViewIsGrid { get; set; } = true;
     public string MainSortKey { get; set; } = "Title"; // Any list column, plus Pages
     public bool MainSortAscending { get; set; } = true;
-    public string ListVisibleColumns { get; set; } = "unread,bookType,rating,author,genre,addedDate";
+    public int ListColumnSettingsVersion { get; set; } = 0;
+    public string ListVisibleColumns { get; set; } = "unread,bookType,rating,author,genre,lastReadDate,addedDate";
     public bool ListColumnOrderAppliesGlobally { get; set; } = true;
     public string ListColumnOrderGlobal { get; set; } = string.Empty;
     public Dictionary<string, string> ListColumnOrdersByCollection { get; set; } = new();

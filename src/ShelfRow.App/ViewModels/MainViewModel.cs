@@ -77,6 +77,7 @@ public class MainViewModel : INotifyPropertyChanged
         _isGridView = _settingsService.Current.MainViewIsGrid;
         _sortKey = _settingsService.Current.MainSortKey;
         _sortAscending = _settingsService.Current.MainSortAscending;
+        MigrateListColumnSettings();
         ListLayout = BuildListLayout();
 
         Volumes.CollectionChanged += (s, e) =>
@@ -343,6 +344,28 @@ public class MainViewModel : INotifyPropertyChanged
 
     public bool IsListColumnVisible(string? id) =>
         LibraryListColumns.TryParse(id, out LibraryListColumn column) && ListLayout.IsVisible(column);
+
+    private void MigrateListColumnSettings()
+    {
+        if (Settings.ListColumnSettingsVersion >= 1)
+            return;
+
+        var visible = new HashSet<LibraryListColumn>();
+        foreach (string id in (Settings.ListVisibleColumns ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (LibraryListColumns.TryParse(id, out LibraryListColumn column))
+                visible.Add(column);
+
+        // The first Windows implementation accidentally omitted this newly added
+        // macOS column from its default set. Migrate once, while still allowing the
+        // user to hide it explicitly afterwards.
+        visible.Add(LibraryListColumn.LastReadDate);
+        Settings.ListVisibleColumns = string.Join(',', LibraryListColumns.Toggleable
+            .Where(visible.Contains)
+            .Select(LibraryListColumns.Id));
+        Settings.ListColumnSettingsVersion = 1;
+        _settingsService.Save();
+    }
 
     public void ToggleListColumn(string? id)
     {
