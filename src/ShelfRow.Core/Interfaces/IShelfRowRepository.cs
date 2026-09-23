@@ -58,4 +58,5 @@ public interface IShelfRowRepository
     Task ConfirmDeletionUploadedAsync(string recordName, CancellationToken cancellationToken = default);
 
     Task MarkAllPendingUploadAsync(CancellationToken cancellationToken = default);
+    Task<string> PrepareCloudSyncAsync(bool replaceLocalLibrary, string environment, CancellationToken cancellationToken = default);
 }

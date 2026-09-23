@@ -7,6 +7,16 @@ namespace ShelfRow.CloudKit.Tests;
 public sealed class CloudKitAccountTests
 {
     [Fact]
+    public void DefaultConfiguration_UsesProductionEnvironmentAndToken()
+    {
+        var configuration = new CloudKitConfiguration();
+
+        Assert.Equal("production", configuration.Environment);
+        Assert.Equal(CloudKitConfiguration.ProductionApiToken, configuration.ApiToken);
+        Assert.Equal(CloudKitConfiguration.ProductionApiToken, CloudKitConfiguration.DefaultApiToken);
+    }
+
+    [Fact]
     public async Task Load_UsesCredentialsForSelectedEnvironment()
     {
         var storage = new MemorySecureStorage

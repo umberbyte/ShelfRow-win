@@ -43,26 +43,29 @@
             </NavigationView.MenuItems>
 
             <!-- Content Area -->
-            <ScrollViewer Padding="28,20,28,24">
-                <StackPanel Spacing="24" MaxWidth="680" HorizontalAlignment="Left">
+            <ScrollViewer x:Name="PageScrollViewer" Padding="28,20,28,24"
+                          HorizontalContentAlignment="Stretch"
+                          HorizontalScrollBarVisibility="Disabled"
+                          SizeChanged="PageScrollViewer_SizeChanged">
+                <StackPanel Spacing="24" HorizontalAlignment="Stretch">
                     <!-- Dynamic Page Title -->
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="PageTitle" Text="一般" FontSize="20" FontWeight="SemiBold" />
-                        <TextBlock x:Name="PageSubtitle" Text="表示とアプリの基本動作を設定します。" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="PageTitle" Text="一般" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PageSubtitle" Text="表示とアプリの基本動作を設定します。" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
 
                     <!-- Pane 1: General -->
                     <StackPanel x:Name="PaneGeneral" Spacing="16" Visibility="Visible">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="16">
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="外観" FontWeight="Medium" />
-                                        <TextBlock Text="Windowsのライト/ダークモードに合わせるか、固定の外観を使います。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="外観" FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="Windowsのライト/ダークモードに合わせるか、固定の外観を使います。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ComboBox Grid.Column="1" x:Name="ComboAppearance" Width="140" SelectionChanged="ComboAppearance_SelectionChanged">
                                         <ComboBoxItem Content="システム準拠" Tag="System" />
@@ -73,13 +76,13 @@
 
                                 <MenuFlyoutSeparator />
 
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="列の並び順" FontWeight="Medium" />
+                                        <TextBlock Text="列の並び順" FontWeight="Medium" TextWrapping="Wrap" />
                                         <TextBlock Text="オフにすると、リストの列順をシェルフごとに保存します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" x:Name="ToggleGlobalColumnOrder" Header="全体に適用" Toggled="ToggleGlobalColumnOrder_Toggled" />
@@ -87,13 +90,13 @@
 
                                 <MenuFlyoutSeparator />
 
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="列の幅" FontWeight="Medium" />
+                                        <TextBlock Text="列の幅" FontWeight="Medium" TextWrapping="Wrap" />
                                         <TextBlock Text="オフにすると、リストの列幅をシェルフごとに保存します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" x:Name="ToggleGlobalColumnWidth" Header="全体に適用" Toggled="ToggleGlobalColumnWidth_Toggled" />
@@ -101,13 +104,13 @@
 
                                 <MenuFlyoutSeparator />
 
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="表示を縮小" FontWeight="Medium" />
+                                        <TextBlock Text="表示を縮小" FontWeight="Medium" TextWrapping="Wrap" />
                                         <TextBlock Text="左右のペインとツールバーをコンパクトにし、本の一覧に表示領域を回します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" x:Name="ToggleCompactDisplay" OnContent="オン" OffContent="オフ" Toggled="SettingChanged" />
@@ -115,14 +118,14 @@
 
                                 <MenuFlyoutSeparator />
 
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="終了動作" FontWeight="Medium" />
-                                        <TextBlock Text="メインウインドウを閉じた時にShelfRowを終了します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="終了動作" FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="メインウインドウを閉じた時にShelfRowを終了します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" x:Name="ToggleCloseOnExit" OnContent="オン" OffContent="オフ" Toggled="SettingChanged" />
                                 </Grid>
@@ -135,8 +138,8 @@
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="6">
-                                    <TextBlock Text="スライドショーヘルパー" FontWeight="Medium" />
-                                    <TextBlock Text="画像フォルダを開くための外部ビューア（exe）を指定します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Text="スライドショーヘルパー" FontWeight="Medium" TextWrapping="Wrap" />
+                                    <TextBlock Text="画像フォルダを開くための外部ビューア（exe）を指定します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -152,8 +155,8 @@
                                 <MenuFlyoutSeparator />
 
                                 <StackPanel Spacing="6">
-                                    <TextBlock Text="Zip アーカイブヘルパー" FontWeight="Medium" />
-                                    <TextBlock Text="Zip アーカイブを開くための外部ビューア（exe）を指定します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Text="Zip アーカイブヘルパー" FontWeight="Medium" TextWrapping="Wrap" />
+                                    <TextBlock Text="Zip アーカイブを開くための外部ビューア（exe）を指定します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -173,10 +176,15 @@
                     <StackPanel x:Name="PaneHelper" Spacing="16" Visibility="Collapsed">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="拡張子とヘルパーアプリケーション" FontWeight="Medium" />
+                                <TextBlock Text="拡張子とヘルパーアプリケーション" FontWeight="Medium" TextWrapping="Wrap" />
                                 <TextBlock Text="拡張子ごとに起動するアプリケーションを設定します。rar / zip / 7z はページ数で種類を判定し、それ以外はムービーとして登録します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
-                                <ListView x:Name="ListHelperMappings" MaxHeight="240" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4" SelectionMode="Single">
+                                <ListView x:Name="ListHelperMappings" MinHeight="88" MaxHeight="360" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4" SelectionMode="Single">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Padding="4" ColumnSpacing="8">
@@ -205,10 +213,15 @@
                     <StackPanel x:Name="PaneKeywords" Spacing="16" Visibility="Collapsed">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="キーワード同一視グループ" FontWeight="Medium" />
+                                <TextBlock Text="キーワード同一視グループ" FontWeight="Medium" TextWrapping="Wrap" />
                                 <TextBlock Text="作者名・ジャンル・キーワードなどをグループ化し、検索時に同一グループとして検索にヒットさせます。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
-                                <ListView x:Name="ListKeywordRules" MaxHeight="240" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4" SelectionMode="Single">
+                                <ListView x:Name="ListKeywordRules" MinHeight="88" MaxHeight="360" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4" SelectionMode="Single">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Padding="4" ColumnSpacing="8">
@@ -248,7 +261,7 @@
                             <!-- Custom Types -->
                             <Border Grid.Column="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="種類のカスタマイズ" FontWeight="Medium" />
+                                    <TextBlock Text="種類のカスタマイズ" FontWeight="Medium" TextWrapping="Wrap" />
                                     <TextBox x:Name="TxtType0" PlaceholderText="厚い本" TextChanged="SettingChanged" />
                                     <TextBox x:Name="TxtType1" PlaceholderText="薄い本" TextChanged="SettingChanged" />
                                     <TextBox x:Name="TxtType2" PlaceholderText="本の一部" TextChanged="SettingChanged" />
@@ -261,7 +274,7 @@
                             <!-- Custom Fields -->
                             <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="項目のカスタマイズ" FontWeight="Medium" />
+                                    <TextBlock Text="項目のカスタマイズ" FontWeight="Medium" TextWrapping="Wrap" />
                                     <TextBox x:Name="TxtFieldAuthor" PlaceholderText="作者" TextChanged="SettingChanged" />
                                     <TextBox x:Name="TxtFieldGenre" PlaceholderText="ジャンル" TextChanged="SettingChanged" />
                                     <TextBox x:Name="TxtFieldRelation" PlaceholderText="関連" TextChanged="SettingChanged" />
@@ -277,20 +290,23 @@
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="2">
-                                    <TextBlock Text="iCloud同期" FontWeight="Medium" />
+                                    <TextBlock Text="iCloud同期" FontWeight="Medium" TextWrapping="Wrap" />
+                                    <ToggleSwitch x:Name="ToggleCloudSync" OnContent="オン" OffContent="オフ" Toggled="ToggleCloudSync_Toggled" />
+                                    <TextBlock x:Name="TxtCloudSyncMode" TextWrapping="Wrap" FontSize="12" />
+                                    <TextBlock Text="1台目はこの端末の蔵書を送信し、2台目以降はiCloudの蔵書で置き換えます。2台の蔵書を突き合わせる処理は行いません。" TextWrapping="Wrap" FontSize="12" />
                                     <TextBlock Text="本・シェルフ・ボリュームの書誌情報を、操作した時点でCloudKitと双方向同期します。サムネイル画像と書籍ファイルはiCloudへ送信されません。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
 
                                 <MenuFlyoutSeparator />
 
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="手動同期" FontWeight="Medium" />
-                                        <TextBlock Text="ローカルの変更を送信した後、iCloud側の増分変更を受信します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="手動同期" FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="ローカルの変更を送信した後、iCloud側の増分変更を受信します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <Button Grid.Column="1" Content="今すぐ同期" Click="SyncNow_Click" />
                                 </Grid>
@@ -298,7 +314,7 @@
                                 <MenuFlyoutSeparator />
 
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="CloudKit 接続" FontWeight="Medium" />
+                                    <TextBlock Text="CloudKit 接続" FontWeight="Medium" TextWrapping="Wrap" />
                                     <TextBlock Text="「サインイン」を押すと Apple ID のサインイン画面が開きます。「サインインしたままにする」を選ぶと2週間、選ばない場合は30分で再サインインが必要になります。"
                                                FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
@@ -311,10 +327,10 @@
                                     </Expander>
 
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="環境" VerticalAlignment="Center" />
-                                        <ComboBox x:Name="CmbCloudEnvironment" Width="180" SelectedIndex="0">
-                                            <ComboBoxItem Content="development" />
-                                            <ComboBoxItem Content="production" />
+                                        <TextBlock Text="環境" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                        <ComboBox x:Name="CmbCloudEnvironment" Width="300" SelectedIndex="0">
+                                            <ComboBoxItem Content="Production" Tag="production" />
+                                            <ComboBoxItem Content="Development（通常は選択しない）" Tag="development" />
                                         </ComboBox>
                                         <Button Content="サインイン" Click="CloudSignIn_Click" />
                                         <Button Content="サインアウト" Click="CloudSignOut_Click" />
@@ -327,10 +343,10 @@
                                 <MenuFlyoutSeparator />
 
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="保守・リセット操作" FontWeight="Medium" />
+                                    <TextBlock Text="保守・リセット操作" FontWeight="Medium" TextWrapping="Wrap" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button Content="全件をiCloudへ再送信..." Click="ResendToCloud_Click" />
-                                        <Button Content="iCloudのデータを完全に削除..." Click="PurgeCloudData_Click" />
+                                        <Button x:Name="BtnResendCloud" Content="全件をiCloudへ再送信..." Click="ResendToCloud_Click" />
+                                        <Button x:Name="BtnPurgeCloud" Content="iCloudのデータを完全に削除..." Click="PurgeCloudData_Click" />
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
@@ -341,34 +357,84 @@
                     <StackPanel x:Name="PaneSecurity" Spacing="16" Visibility="Collapsed">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="16">
-                                <Grid>
+                                <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="簡易ロック" FontWeight="Medium" />
-                                        <TextBlock Text="ウインドウの表示にパスワードの入力が必要になります。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="簡易ロック" FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="ウインドウの表示にパスワードの入力が必要になります。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <ToggleSwitch Grid.Column="1" x:Name="TogglePasswordLock" OnContent="オン" OffContent="オフ" Toggled="TogglePasswordLock_Toggled" />
                                 </Grid>
 
                                 <MenuFlyoutSeparator />
 
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="ロック解除パスワード" FontWeight="Medium" />
-                                    <PasswordBox x:Name="TxtPasswordValue" Width="260" HorizontalAlignment="Left" PasswordChanged="SettingChanged" />
-                                </StackPanel>
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="ロック解除パスワード" FontWeight="Medium" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <PasswordBox Grid.Column="1" x:Name="TxtPasswordValue" HorizontalAlignment="Stretch" PasswordChanged="SettingChanged" />
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>
 
                     <!-- Pane 8: Maintenance -->
                     <StackPanel x:Name="PaneMaintenance" Spacing="16" Visibility="Collapsed">
+                        <!-- Backup -->
+                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="バックアップ" FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="データベース、サムネイル、設定ファイルをまとめて保存・復元します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" x:Name="ToggleBackupEnabled" OnContent="有効" OffContent="無効" Toggled="BackupEnabled_Toggled" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TxtBackupFolder" IsReadOnly="True" PlaceholderText="バックアップ先フォルダ未設定" />
+                                    <Button Grid.Column="1" x:Name="BtnBrowseBackup" Content="選択..." Click="BrowseBackupFolder_Click" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="240" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="BtnBackupNow" Content="今すぐバックアップ" HorizontalAlignment="Left" Click="BackupNow_Click" />
+                                    <TextBlock Grid.Column="1" Text="対象フォルダ内の「ShelfRowBackup」へ差分コピーします。前回とサイズ・更新日時が同じファイルはコピーせず、不要になったバックアップファイルは削除します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="240" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="BtnRestoreBackup" Content="バックアップからリストア" HorizontalAlignment="Left" Click="RestoreBackup_Click" />
+                                    <TextBlock Grid.Column="1" Text="現在のDB・サムネイル・設定をバックアップ時点へ戻します。安全のため、復元内容は次回起動時に適用します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                </Grid>
+
+                                <TextBlock x:Name="TxtBackupStatus" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
                         <!-- Thumbnail Distribution -->
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="サムネイルの配布 (NAS共有)" FontWeight="Medium" />
+                                <TextBlock Text="サムネイルの配布 (NAS共有)" FontWeight="Medium" TextWrapping="Wrap" />
                                 <TextBlock Text="NAS上の共有フォルダ（ShelfRowThumbnails）を経由して各端末がサムネイルを同期します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
                                 <Grid Margin="0,4,0,0">
@@ -391,19 +457,19 @@
                         <!-- Maintenance Actions -->
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="メンテナンス処理" FontWeight="Medium" />
+                                <TextBlock Text="メンテナンス処理" FontWeight="Medium" TextWrapping="Wrap" />
 
                                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="12,8" Click="OpenVolumes_Click">
                                     <StackPanel Spacing="2">
-                                        <TextBlock Text="ボリューム管理..." FontWeight="Medium" />
-                                        <TextBlock Text="NASやドライブのパス（POSIX / Windows）の再割り当てを行います。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="ボリューム管理..." FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="NASやドライブのパス（POSIX / Windows）の再割り当てを行います。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Button>
 
                                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="12,8" Click="ImportXml_Click">
                                     <StackPanel Spacing="2">
-                                        <TextBlock Text="Stackroom XMLライブラリのインポート..." FontWeight="Medium" />
-                                        <TextBlock Text="Stackroom Library.xml から書籍・シェルフデータをインポートします。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="Stackroom XMLライブラリのインポート..." FontWeight="Medium" TextWrapping="Wrap" />
+                                        <TextBlock Text="Stackroom Library.xml から書籍・シェルフデータをインポートします。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>

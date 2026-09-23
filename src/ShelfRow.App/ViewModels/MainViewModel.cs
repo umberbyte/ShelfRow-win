@@ -1054,9 +1054,40 @@ public class MainViewModel : INotifyPropertyChanged
         await LoadVolumesAsync();
     }
 
+    public Task<string?> GetCloudSyncModeAsync() => new CloudKitSyncSession(_repository).GetModeAsync();
+
+    public async Task SetCloudSyncEnabledAsync(bool enabled, bool replaceLocalLibrary = false, CancellationToken cancellationToken = default)
+    {
+        if (IsLoading || IsImporting || IsSyncingThumbnails)
+            throw new InvalidOperationException("実行中の処理が終わってから同期設定を変更してください。");
+        IsLoading = true;
+        try
+        {
+            if (enabled)
+            {
+                StatusMessage = "切り替え前のバックアップを作成しています...";
+                string backup = await Task.Run(() => _repository.PrepareCloudSyncAsync(
+                    replaceLocalLibrary, _cloudKitAccount.Environment, cancellationToken), cancellationToken);
+                App.Log($"Sync: prepared {(replaceLocalLibrary ? "replica" : "primary")}, backup={backup}");
+                _imageLoader?.ClearMemoryCache();
+                await RefreshBooksAsync();
+                await LoadShelvesAsync();
+                await LoadVolumesAsync();
+                StatusMessage = "iCloud同期をオンにしました。";
+            }
+            else
+            {
+                await new CloudKitSyncSession(_repository).DisableAsync(cancellationToken);
+                StatusMessage = "iCloud同期をオフにしました。端末とiCloudの蔵書は残っています。";
+            }
+        }
+        finally { IsLoading = false; }
+        if (enabled) await SyncWithCloudKitAsync(cancellationToken);
+    }
+
     public async Task SyncWithCloudKitAsync(CancellationToken cancellationToken = default)
     {
-        if (IsLoading)
+        if (IsLoading || IsImporting)
         {
             App.Log("Sync: ignored, another operation is already running");
             return;
@@ -1066,6 +1097,8 @@ public class MainViewModel : INotifyPropertyChanged
         StatusMessage = "iCloudと同期中...";
         try
         {
+            var session = new CloudKitSyncSession(_repository);
+            await session.RequiresInitialDownloadAsync(_cloudKitAccount.Environment, cancellationToken);
             await _cloudKitAccount.LoadAsync(cancellationToken);
             App.Log($"Sync: starting. hasApiToken={_cloudKitAccount.HasApiToken} signedIn={_cloudKitAccount.IsSignedIn} env={_cloudKitAccount.Environment}");
 
@@ -1085,12 +1118,10 @@ public class MainViewModel : INotifyPropertyChanged
             // thread that freezes the window for minutes and Windows paints it black, so
             // the whole exchange runs off it. Progress reports come back here on their
             // own, because Progress<T> captures this thread when it is created.
-            var upload = await Task.Run(() => _cloudKitAccount.ExecuteAsync(
-                ct => _syncEngine.SyncUpAsync(uploadProgress, ct),
-                cancellationToken), cancellationToken);
-
-            var result = await Task.Run(() => _cloudKitAccount.ExecuteAsync(
-                ct => _syncEngine.SyncDownAsync(progress, ct),
+            var (upload, result) = await Task.Run(() => session.SyncAsync(
+                _cloudKitAccount.Environment,
+                ct => _cloudKitAccount.ExecuteAsync(inner => _syncEngine.SyncUpAsync(uploadProgress, inner), ct),
+                ct => _cloudKitAccount.ExecuteAsync(inner => _syncEngine.SyncDownAsync(progress, inner), ct),
                 cancellationToken), cancellationToken);
 
             await RefreshBooksAsync();
@@ -1137,12 +1168,23 @@ public class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public async Task ResendEverythingToCloudAsync(CancellationToken cancellationToken = default)
     {
+        if (IsLoading || await GetCloudSyncModeAsync() != "primary")
+        {
+            StatusMessage = "全件再送信は同期がオンの1台目でのみ実行できます。";
+            return;
+        }
         await _repository.MarkAllPendingUploadAsync(cancellationToken);
         await SyncWithCloudKitAsync(cancellationToken);
     }
 
     public async Task PurgeCloudDataAsync(CancellationToken cancellationToken = default)
     {
+        if (IsLoading || await GetCloudSyncModeAsync() != "primary")
+        {
+            StatusMessage = "iCloudの全削除は同期がオンの1台目でのみ実行できます。";
+            return;
+        }
+        IsLoading = true;
         try
         {
             StatusMessage = "iCloudのデータを削除しています...";
@@ -1150,12 +1192,14 @@ public class MainViewModel : INotifyPropertyChanged
             await _cloudKitAccount.DeleteCoreDataZoneAsync(cancellationToken);
             await _repository.DeleteSyncMetadataAsync(CloudKitSyncEngine.SyncTokenKey, cancellationToken);
             await _cloudKitAccount.SignOutAsync(cancellationToken);
+            await new CloudKitSyncSession(_repository).DisableAsync(cancellationToken);
             StatusMessage = "iCloudのデータを削除し、サインアウトしました。端末内の蔵書は残っています。";
         }
         catch (Exception ex)
         {
             StatusMessage = $"iCloudデータの削除に失敗しました: {ex.Message}";
         }
+        finally { IsLoading = false; }
     }
 
     private bool _isSyncingThumbnails;
@@ -1310,7 +1354,7 @@ public class MainViewModel : INotifyPropertyChanged
 
     public async Task ImportXmlFileAsync(string xmlFilePath, CancellationToken cancellationToken = default)
     {
-        if (IsImporting) return;
+        if (IsImporting || IsLoading) return;
         IsImporting = true;
         StatusMessage = "Stackroom XML をインポート中...";
 

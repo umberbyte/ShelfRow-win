@@ -150,6 +150,12 @@ public class CloudKitAccount
         return await operation(cancellationToken);
     }
 
+    public async Task SignInAsync(CancellationToken cancellationToken = default)
+    {
+        // Read a single change to validate credentials without uploading or changing the local library.
+        await ExecuteAsync(ct => _client.FetchZoneChangesAsync(resultsLimit: 1, cancellationToken: ct), cancellationToken);
+    }
+
     private async Task ClearWebAuthTokenAsync(CancellationToken cancellationToken)
     {
         _client.Configuration.WebAuthToken = null;

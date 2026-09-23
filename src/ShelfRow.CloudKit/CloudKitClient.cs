@@ -31,7 +31,7 @@ public class CloudKitConfiguration
     public const string ProductionApiToken = "b0123ff1bf52276f7a5fb81b0206698493b69a9b48d70aace43097e435b6d269";
 
     // Kept for source compatibility with the probe and existing callers.
-    public const string DefaultApiToken = DevelopmentApiToken;
+    public const string DefaultApiToken = ProductionApiToken;
 
     public static string BuiltInApiTokenFor(string environment) =>
         environment.Equals("production", StringComparison.OrdinalIgnoreCase)
@@ -42,7 +42,7 @@ public class CloudKitConfiguration
     /// Required on every request, including ones that also carry a web auth token.
     /// Overridable so a different container can be pointed at without a rebuild.
     /// </summary>
-    public string? ApiToken { get; set; } = DevelopmentApiToken;
+    public string? ApiToken { get; set; } = ProductionApiToken;
 
     /// <summary>
     /// Identifies the signed-in Apple ID. Required for the private database.

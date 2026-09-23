@@ -82,10 +82,9 @@ public class AppSettings
 
     /// <summary>
     /// Which CloudKit environment the library lives in, "development" or "production".
-    /// A build run from Xcode writes to development, so that is where an unreleased
-    /// Mac app's data is.
+    /// Production is the default for normal use; development is for testing only.
     /// </summary>
-    public string CloudKitEnvironment { get; set; } = "development";
+    public string CloudKitEnvironment { get; set; } = "production";
     public bool ThumbnailAutoFetchEnabled { get; set; } = true;
     public int ThumbnailConcurrency { get; set; } = 8;
 

@@ -30,6 +30,34 @@ public sealed class CloudKitSyncDownTests : IDisposable
         try { File.Delete(_dbPath + "-shm"); } catch { }
     }
 
+    [Theory]
+    [InlineData("{\"zones\":[]}")]
+    [InlineData("{\"zones\":[{\"serverErrorCode\":\"ZONE_NOT_FOUND\",\"reason\":\"missing zone\"}]}")]
+    public async Task SyncDown_InvalidZoneResponseDoesNotCompleteReplicaSetup(string body)
+    {
+        using var repository = new SqliteShelfRowRepository(_dbPath);
+        await repository.InitializeAsync();
+        await repository.SetSyncMetadataAsync("CloudKit_Mode", "replica");
+        await repository.SetSyncMetadataAsync("CloudKit_Environment", "production");
+        await repository.SetSyncMetadataAsync("CloudKit_InitialDownload", "1");
+        var client = new CloudKitClient(new CloudKitConfiguration { ApiToken = "test" },
+            new HttpClient(new ResponseHandler(body)));
+        var engine = new CloudKitSyncEngine(client, repository);
+        var session = new CloudKitSyncSession(repository);
+        await Assert.ThrowsAnyAsync<Exception>(() => session.SyncAsync("production",
+            ct => throw new Exception("Upload must not run"), ct => engine.SyncDownAsync(cancellationToken: ct)));
+        Assert.True(await session.RequiresInitialDownloadAsync("production"));
+    }
+
+    private sealed class ResponseHandler(string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+    }
+
     private sealed class FailingSecondPageHandler : HttpMessageHandler
     {
         private int _calls;

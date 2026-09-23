@@ -1,0 +1,16 @@
+ShelfRow Private Trust 署名について
+
+この配布物は Azure Artifact Signing の Private Trust 証明書で署名されています。
+Private Trust の認証局は Windows で既定には信頼されません。組織内配布を想定した署名です。
+
+配布先では、Azure Artifact Signingから取得したルート証明書を、組織の管理者が
+Intune、グループポリシー、WDAC などの管理された方法で信頼する必要があります。
+利用者へ無条件にルート証明書を手動インストールさせないでください。
+
+ArtifactSigning-PrivateTrust-Root.cer が同梱されている場合は、Microsoft公式の
+Get-AzArtifactSigningCertificateRoot で取得したものです。
+
+一般公開し、通常の Windows 環境で発行元を信頼させる場合は、Artifact Signing の
+Public Trust 証明書プロファイルで再署名してください。
+
+.cer.sha256 がある場合は、ルート証明書ファイルの整合性確認用です。

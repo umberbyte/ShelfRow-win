@@ -1203,6 +1203,47 @@ public class SqliteShelfRowRepository : IShelfRowRepository, IDisposable
     /// <summary>
     /// Queues every row for upload, for the "resend everything" repair in Preferences.
     /// </summary>
+    /// <summary>Backs up the live SQLite database before atomically preparing the chosen library.</summary>
+    public async Task<string> PrepareCloudSyncAsync(bool replaceLocalLibrary, string environment, CancellationToken cancellationToken = default)
+    {
+        if (environment is not ("production" or "development"))
+            throw new ArgumentException("Unknown CloudKit environment.", nameof(environment));
+        using var lease = await EnterDatabaseAsync(cancellationToken);
+        var conn = await GetOpenConnectionAsync(cancellationToken);
+        string backupDirectory = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(conn.DataSource))!, "Backups");
+        using (var previousEnvironment = conn.CreateCommand())
+        {
+            previousEnvironment.CommandText = "SELECT Value FROM SyncMetadata WHERE Key = 'CloudKit_Environment'";
+            var previous = await previousEnvironment.ExecuteScalarAsync(cancellationToken) as string;
+            if (!replaceLocalLibrary && previous != null && previous != environment)
+                throw new InvalidOperationException("別環境と同期した蔵書を1台目として送信できません。元の環境に戻すか、2台目以降として置き換えてください。");
+        }
+        Directory.CreateDirectory(backupDirectory);
+        string backupPath = Path.Combine(backupDirectory, $"before-cloud-switch-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.db");
+        cancellationToken.ThrowIfCancellationRequested();
+        // SQLite's backup API includes committed WAL pages; copying the .db file does not.
+        using (var backup = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backupPath }.ToString()))
+        {
+            await backup.OpenAsync(cancellationToken);
+            conn.BackupDatabase(backup);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = replaceLocalLibrary
+            ? "DELETE FROM ItemShelves; DELETE FROM Items; DELETE FROM Shelves; DELETE FROM Volumes; DELETE FROM LocalCoverStates; DELETE FROM PendingCloudKitDeletions; DELETE FROM SyncMetadata;"
+            : "UPDATE Items SET PendingUpload = 1; UPDATE Shelves SET PendingUpload = 1; UPDATE Volumes SET PendingUpload = 1; UPDATE ItemShelves SET PendingOperation = 1 WHERE CloudKitRecordName IS NULL; DELETE FROM SyncMetadata WHERE Key = 'CloudKit_SyncToken';";
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        cmd.CommandText = "INSERT OR REPLACE INTO SyncMetadata (Key, Value) VALUES ('CloudKit_Mode', @mode), ('CloudKit_Environment', @environment), ('CloudKit_InitialDownload', @pending)";
+        cmd.Parameters.AddWithValue("@mode", replaceLocalLibrary ? "replica" : "primary");
+        cmd.Parameters.AddWithValue("@environment", environment);
+        cmd.Parameters.AddWithValue("@pending", replaceLocalLibrary ? "1" : "0");
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return backupPath;
+    }
+
     public async Task MarkAllPendingUploadAsync(CancellationToken cancellationToken = default)
     {
         using var lease = await EnterDatabaseAsync(cancellationToken);

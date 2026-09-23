@@ -70,6 +70,7 @@ public partial class App : Application
     public static MainViewModel? MainViewModel { get; private set; }
     public static ThumbnailImageLoader? ImageLoader { get; private set; }
     public static CloudKitAccount? CloudKitAccount { get; private set; }
+    public static ShelfRowBackupManager? BackupManager { get; private set; }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -84,6 +85,20 @@ public partial class App : Application
             Directory.CreateDirectory(appData);
 
             string dbPath = Path.Combine(appData, "shelfrow.db");
+            string settingsPath = Path.Combine(appData, "settings.json");
+            string thumbnailPath = Path.Combine(appData, "Thumbnails");
+            BackupManager = new ShelfRowBackupManager(appData, thumbnailPath, settingsPath, dbPath);
+            try
+            {
+                var restore = BackupManager.ApplyPendingRestoreAsync().GetAwaiter().GetResult();
+                if (restore != null)
+                    Log($"Applied pending restore: copied={restore.CopiedFiles}, removed={restore.RemovedFiles}");
+            }
+            catch (Exception ex)
+            {
+                // A failed restore must never prevent access to the current library.
+                Log($"Pending restore failed; current library was preserved: {ex}");
+            }
             var repository = new SqliteShelfRowRepository(dbPath);
             var thumbnailStorage = new ThumbnailStorageManager();
 

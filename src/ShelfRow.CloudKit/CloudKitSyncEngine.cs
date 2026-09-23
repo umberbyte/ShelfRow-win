@@ -177,9 +177,11 @@ public class CloudKitSyncEngine
         {
             var response = await _client.FetchZoneChangesAsync(syncToken, cancellationToken: cancellationToken);
             if (response.Zones == null || response.Zones.Count == 0)
-                break;
+                throw new InvalidOperationException("iCloudから同期対象ゾーンの応答がありませんでした。受信を再試行してください。");
 
             var zone = response.Zones[0];
+            if (zone.ServerErrorCode is not null)
+                throw new CloudKitException(System.Net.HttpStatusCode.OK, zone.ServerErrorCode, zone.Reason, zone.RedirectURL);
             syncToken = zone.SyncToken;
             moreComing = zone.MoreComing;
 

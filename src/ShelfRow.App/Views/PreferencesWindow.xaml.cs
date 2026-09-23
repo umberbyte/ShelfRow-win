@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,6 +16,13 @@ namespace ShelfRow.App.Views;
 
 public sealed partial class PreferencesWindow : Window
 {
+    // About 1545 physical pixels at 150% scaling, matching the reference window.
+    private const int PreferredWidth = 1030;
+    private const int PreferredHeight = 800;
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr windowHandle);
+
     private readonly MainViewModel _mainViewModel;
     private readonly AppSettingsService _settingsService;
     private readonly AppSettings _settings;
@@ -35,7 +43,14 @@ public sealed partial class PreferencesWindow : Window
         Title = "設定";
         try
         {
-            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 720));
+            IntPtr windowHandle = WindowNative.GetWindowHandle(this);
+            double scale = Math.Max(1, GetDpiForWindow(windowHandle) / 96.0);
+            var workArea = Microsoft.UI.Windowing.DisplayArea
+                .GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary)
+                .WorkArea;
+            int width = Math.Min((int)Math.Round(PreferredWidth * scale), workArea.Width - 80);
+            int height = Math.Min((int)Math.Round(PreferredHeight * scale), workArea.Height - 80);
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
         }
         catch { }
 
@@ -101,9 +116,12 @@ public sealed partial class PreferencesWindow : Window
 
         // Maintenance
         TxtThumbnailRoot.Text = _settings.ThumbnailDistributionRoot;
+        ToggleBackupEnabled.IsOn = _settings.BackupEnabled;
+        TxtBackupFolder.Text = _settings.BackupFolderPath;
+        UpdateBackupControls();
 
         // iCloud: the token itself stays in the credential locker and is never shown back.
-        CmbCloudEnvironment.SelectedIndex = App.CloudKitAccount?.Environment == "production" ? 1 : 0;
+        CmbCloudEnvironment.SelectedIndex = (App.CloudKitAccount?.Environment ?? _settings.CloudKitEnvironment) == "development" ? 1 : 0;
         _ = RefreshCloudAuthStatusAsync();
     }
 
@@ -151,6 +169,8 @@ public sealed partial class PreferencesWindow : Window
 
         // Maintenance
         _settings.ThumbnailDistributionRoot = TxtThumbnailRoot.Text;
+        _settings.BackupEnabled = ToggleBackupEnabled.IsOn;
+        _settings.BackupFolderPath = TxtBackupFolder.Text;
 
         _settingsService.Save(_settings);
         _mainViewModel.ReloadSettings();
@@ -284,8 +304,18 @@ public sealed partial class PreferencesWindow : Window
         }
     }
 
+    private void PageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Keep the lists bounded for virtualization while using the available height.
+        // Reserve room for the page heading, card description, actions and padding.
+        double listHeight = Math.Max(200, e.NewSize.Height - 260);
+        if (ListHelperMappings != null) ListHelperMappings.MaxHeight = listHeight;
+        if (ListKeywordRules != null) ListKeywordRules.MaxHeight = listHeight;
+    }
+
     private void ShowPane(string pane)
     {
+        PageScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         PaneGeneral.Visibility = pane == "general" ? Visibility.Visible : Visibility.Collapsed;
         PaneViewer.Visibility = pane == "viewer" ? Visibility.Visible : Visibility.Collapsed;
         PaneHelper.Visibility = pane == "helper" ? Visibility.Visible : Visibility.Collapsed;
@@ -431,6 +461,90 @@ public sealed partial class PreferencesWindow : Window
 
     #region Maintenance & Actions
 
+    private void BackupEnabled_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+        SaveSettingsFromUI();
+        UpdateBackupControls();
+    }
+
+    private void UpdateBackupControls(bool running = false)
+    {
+        bool enabled = ToggleBackupEnabled.IsOn && !running;
+        BtnBrowseBackup.IsEnabled = enabled;
+        bool hasFolder = !string.IsNullOrWhiteSpace(TxtBackupFolder.Text);
+        BtnBackupNow.IsEnabled = enabled && hasFolder;
+        BtnRestoreBackup.IsEnabled = enabled && hasFolder;
+    }
+
+    private async void BrowseBackupFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FolderPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+        picker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
+        picker.FileTypeFilter.Add("*");
+        var folder = await picker.PickSingleFolderAsync();
+        if (folder == null) return;
+
+        TxtBackupFolder.Text = folder.Path;
+        TxtBackupStatus.Text = string.Empty;
+        SaveSettingsFromUI();
+        UpdateBackupControls();
+    }
+
+    private async void BackupNow_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.BackupManager == null) return;
+        UpdateBackupControls(running: true);
+        TxtBackupStatus.Text = "バックアップを開始しています...";
+        try
+        {
+            var summary = await App.BackupManager.BackUpAsync(TxtBackupFolder.Text);
+            TxtBackupStatus.Text = $"バックアップ完了: コピー {summary.CopiedFiles} 件、スキップ {summary.SkippedFiles} 件、削除 {summary.RemovedFiles} 件。";
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Backup failed: {ex}");
+            TxtBackupStatus.Text = $"バックアップに失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            UpdateBackupControls();
+        }
+    }
+
+    private async void RestoreBackup_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.BackupManager == null || Content?.XamlRoot is not { } root) return;
+        var dialog = new ContentDialog
+        {
+            Title = "バックアップからリストアしますか？",
+            Content = "現在のShelfRowデータはバックアップ時点の内容で上書きされます。復元内容は次回起動時に適用されます。",
+            PrimaryButtonText = "リストア",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+        UpdateBackupControls(running: true);
+        TxtBackupStatus.Text = "リストア内容を検証しています...";
+        try
+        {
+            var summary = await App.BackupManager.StageRestoreAsync(TxtBackupFolder.Text);
+            TxtBackupStatus.Text = $"リストア準備完了: {summary.CopiedFiles} 件。ShelfRowを再起動すると復元が適用されます。";
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Restore staging failed: {ex}");
+            TxtBackupStatus.Text = $"リストアに失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            UpdateBackupControls();
+        }
+    }
+
     private async void BrowseThumbnailRoot_Click(object sender, RoutedEventArgs e)
     {
         var picker = new FolderPicker();
@@ -454,6 +568,93 @@ public sealed partial class PreferencesWindow : Window
         SaveSettingsFromUI();
     }
 
+    private bool _updatingCloudToggle;
+    private bool _changingCloudSync;
+
+    private async Task RefreshCloudSyncControlsAsync()
+    {
+        string? mode = await _mainViewModel.GetCloudSyncModeAsync();
+        _updatingCloudToggle = true;
+        ToggleCloudSync.IsOn = mode is "primary" or "replica";
+        _updatingCloudToggle = false;
+        TxtCloudSyncMode.Text = mode switch
+        {
+            "primary" => "1台目：この端末の蔵書をiCloudへ送信",
+            "replica" => "2台目以降：iCloudの蔵書を受信して開始",
+            _ => "同期はオフです。オンにすると、どちらの蔵書を残すか選択できます。"
+        };
+        CmbCloudEnvironment.IsEnabled = !ToggleCloudSync.IsOn;
+        BtnResendCloud.IsEnabled = BtnPurgeCloud.IsEnabled = mode == "primary";
+    }
+
+    private async void ToggleCloudSync_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing || _updatingCloudToggle || _changingCloudSync) return;
+        _changingCloudSync = true;
+        ToggleCloudSync.IsEnabled = false;
+        try
+        {
+            if (ToggleCloudSync.IsOn)
+            {
+                var choice = new RadioButtons();
+                choice.Items.Add("この端末の蔵書をiCloudへ送る（1台目）");
+                choice.Items.Add("iCloudの蔵書で置き換える（2台目以降）");
+                var dialog = new ContentDialog
+                {
+                    Title = "どちらの蔵書を残しますか？",
+                    Content = new StackPanel
+                    {
+                        Spacing = 16,
+                        Children =
+                        {
+                            new TextBlock { Text = "切り替え前に蔵書データベースをバックアップします。\n\n1台目：この端末の蔵書を送信します。すでにiCloudに同じ本がある場合、二重に登録されることがあります。\n\n2台目以降：この端末の蔵書とボリュームのパスマッピングを削除し、iCloudの蔵書で置き換えます。書籍ファイルは削除しません。受信が終わるまでは蔵書が空または一部のみ表示されます。", TextWrapping = TextWrapping.Wrap },
+                            choice
+                        }
+                    },
+                    PrimaryButtonText = "同期をオンにする",
+                    CloseButtonText = "キャンセル",
+                    DefaultButton = ContentDialogButton.Close,
+                    IsPrimaryButtonEnabled = false,
+                    XamlRoot = Content.XamlRoot
+                };
+                choice.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = choice.SelectedIndex >= 0;
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                await ConfigureCloudAccountAsync();
+                await App.CloudKitAccount!.SignInAsync();
+                await _mainViewModel.SetCloudSyncEnabledAsync(true, choice.SelectedIndex == 1);
+            }
+            else
+            {
+                await _mainViewModel.SetCloudSyncEnabledAsync(false);
+            }
+            TxtCloudAuthStatus.Text = _mainViewModel.StatusMessage;
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Cloud sync setup failed: {ex}");
+            TxtCloudAuthStatus.Text = $"同期設定を変更できませんでした: {ex.Message}";
+        }
+        finally
+        {
+            await RefreshCloudSyncControlsAsync();
+            ToggleCloudSync.IsEnabled = true;
+            _changingCloudSync = false;
+        }
+    }
+
+    private async Task ConfigureCloudAccountAsync()
+    {
+        var account = App.CloudKitAccount ?? throw new InvalidOperationException("iCloudが初期化されていません。");
+        if (_mainViewModel.IsLoading) throw new InvalidOperationException("同期処理が終わるまでお待ちください。");
+        account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "production";
+        _settings.CloudKitEnvironment = account.Environment;
+        _settingsService.Save(_settings);
+        _mainViewModel.ReloadSettings();
+        string token = TxtCloudApiToken.Password.Trim();
+        if (token.Length > 0) await account.SetApiTokenAsync(token);
+        else await account.LoadAsync();
+    }
+
     private async void SyncNow_Click(object sender, RoutedEventArgs e)
     {
         // The main window's status bar is behind this window, so the result has to be
@@ -465,39 +666,43 @@ public sealed partial class PreferencesWindow : Window
 
     private async void CloudSignIn_Click(object sender, RoutedEventArgs e)
     {
-        var account = App.CloudKitAccount;
-        if (account == null) return;
-
-        account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
-        _settings.CloudKitEnvironment = account.Environment;
-        _settingsService.Save(_settings);
-
-        string token = TxtCloudApiToken.Password.Trim();
-        if (token.Length > 0)
-            await account.SetApiTokenAsync(token);
-        else
-            await account.LoadAsync();
-
-        // Signing in has no endpoint of its own: the sign-in page is reached by making a
-        // real request and following the redirect the server answers with.
-        TxtCloudAuthStatus.Text = "サインインしています...";
-        await _mainViewModel.SyncWithCloudKitAsync();
-        TxtCloudAuthStatus.Text = _mainViewModel.StatusMessage;
+        if (_changingCloudSync) return;
+        try
+        {
+            await ConfigureCloudAccountAsync();
+            TxtCloudAuthStatus.Text = "サインインしています...";
+            await App.CloudKitAccount!.SignInAsync();
+            await RefreshCloudAuthStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Cloud sign-in failed: {ex}");
+            TxtCloudAuthStatus.Text = $"サインインできませんでした: {ex.Message}";
+        }
     }
 
     private async void CloudSignOut_Click(object sender, RoutedEventArgs e)
     {
-        if (App.CloudKitAccount is { } account)
+        if (_changingCloudSync || _mainViewModel.IsLoading) return;
+        try
         {
-            account.Environment = (CmbCloudEnvironment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "development";
-            await account.SignOutAsync();
+            await _mainViewModel.SetCloudSyncEnabledAsync(false);
+            if (App.CloudKitAccount is { } account)
+                await account.SignOutAsync();
+            await RefreshCloudAuthStatusAsync();
         }
-
-        await RefreshCloudAuthStatusAsync();
+        catch (Exception ex)
+        {
+            App.Log($"Cloud sign-out failed: {ex}");
+            TxtCloudAuthStatus.Text = $"サインアウトできませんでした: {ex.Message}";
+        }
     }
 
     private async Task RefreshCloudAuthStatusAsync()
     {
+        try
+        {
+        await RefreshCloudSyncControlsAsync();
         var account = App.CloudKitAccount;
         if (account == null) return;
 
@@ -506,6 +711,12 @@ public sealed partial class PreferencesWindow : Window
         TxtCloudAuthStatus.Text = account.IsSignedIn
             ? $"サインイン済み ({account.Environment})"
             : "未サインインです。「サインイン」を押してください。";
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Cloud settings load failed: {ex}");
+            TxtCloudAuthStatus.Text = $"iCloud設定を読み込めませんでした: {ex.Message}";
+        }
     }
 
     private async void ResendToCloud_Click(object sender, RoutedEventArgs e)

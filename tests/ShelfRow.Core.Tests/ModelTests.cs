@@ -7,6 +7,22 @@ namespace ShelfRow.Core.Tests;
 public class ModelTests
 {
     [Fact]
+    public void AppSettings_CloudKitEnvironment_DefaultsToProduction()
+    {
+        Assert.Equal("production", new AppSettings().CloudKitEnvironment);
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{}");
+        Assert.Equal("production", settings!.CloudKitEnvironment);
+    }
+
+    [Fact]
+    public void AppSettings_CloudKitEnvironment_PreservesExplicitDevelopment()
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(
+            "{\"CloudKitEnvironment\":\"development\"}");
+        Assert.Equal("development", settings!.CloudKitEnvironment);
+    }
+
+    [Fact]
     public void Item_DefaultInitialization_SetsExpectedValues()
     {
         var item = new Item();
