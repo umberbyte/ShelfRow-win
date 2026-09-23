@@ -51,6 +51,8 @@ public class StackroomXmlImporterTests
             <key>Unseen</key><false/>
             <key>Pages</key><integer>320</integer>
             <key>Neta</key><string>Classic space story</string>
+            <key>Memo</key><string>Private note</string>
+            <key>Genre</key><string>Science Fiction</string>
             <key>Keyword A</key><string>Space</string>
         </dict>
     </dict>
@@ -93,7 +95,9 @@ public class StackroomXmlImporterTests
         Assert.Equal(5, book.Rating);
         Assert.False(book.IsUnread);
         Assert.Equal(320, book.Pages);
-        Assert.Equal("Classic space story", book.Memo);
+        Assert.Equal("Classic space story", book.Relation);
+        Assert.Equal("Private note", book.Memo);
+        Assert.Equal("Science Fiction", book.Genre);
         Assert.Equal("Space", book.KeywordA);
 
         // Volume assertion
@@ -134,7 +138,7 @@ public class StackroomXmlImporterTests
 
         var volume = new Volume { Name = "Books", LastKnownPath = "/Volumes/Books" };
         var legacyMatch = new Item { LegacyId = 101, RelativePath = "Original.zip", Title = "Existing legacy item", VolumeId = volume.Id };
-        var pathMatch = new Item { RelativePath = "SciFi/Second.zip", Title = "Existing path item", VolumeId = volume.Id };
+        var pathMatch = new Item { LegacyId = 202, RelativePath = "SciFi/Second.zip", Title = "Existing path item", VolumeId = volume.Id };
         var existingShelf = new Shelf { Title = "Favorites", Type = 0 };
         var context = new StackroomImportMergeContext(
             new[] { legacyMatch, pathMatch },
@@ -159,9 +163,97 @@ public class StackroomXmlImporterTests
         Assert.Contains(pathMatch.Id, importedShelf.ItemIds);
         Assert.Contains(importedBook.Id, importedShelf.ItemIds);
 
-        Assert.Equal(2, result.ItemsWithUpdatedShelfMembership.Count);
+        Assert.Equal(2, result.UpdatedExistingBooks.Count);
         Assert.Contains(importedShelf.Id, legacyMatch.ShelfIds);
         Assert.Contains(importedShelf.Id, pathMatch.ShelfIds);
+    }
+
+    [Fact]
+    public async Task ImportAsync_IncrementallyRepairsFieldsAndAddsExistingShelfMembership()
+    {
+        const string sampleXml = @"<?xml version=""1.0"" encoding=""UTF-8""?>
+<plist version=""1.0""><dict>
+<key>Books</key><dict>
+  <key>1</key><dict>
+    <key>ID</key><integer>1</integer><key>Title</key><string>Existing</string>
+    <key>Path</key><string>/Volumes/Books/shared.zip</string>
+    <key>Genre</key><string>Genre</string><key>Neta</key><string>Relation</string>
+    <key>Keyword A</key><string>A</string><key>Keyword B</key><string>B</string>
+    <key>Memo</key><string>Actual memo</string>
+  </dict>
+  <key>3</key><dict>
+    <key>ID</key><integer>3</integer><key>Title</key><string>New registration</string>
+    <key>Path</key><string>/Volumes/Books/shared.zip</string>
+    <key>Genre</key><string>New genre</string><key>Neta</key><string>New relation</string>
+    <key>memo</key><string>lowercase memo</string>
+  </dict>
+</dict>
+<key>Playlists</key><array>
+  <dict><key>Title</key><string>Existing shelf</string><key>Type</key><integer>0</integer>
+    <key>Items</key><array><integer>1</integer><integer>3</integer></array></dict>
+  <dict><key>Title</key><string>New shelf</string><key>Type</key><integer>0</integer>
+    <key>Items</key><array><integer>3</integer></array></dict>
+</array>
+</dict></plist>";
+
+        var volume = new Volume { Name = "Books", LastKnownPath = "/Volumes/Books" };
+        var existing = new Item
+        {
+            LegacyId = 1,
+            RelativePath = "shared.zip",
+            Title = "Locally edited title",
+            Memo = "Relation",
+            VolumeId = volume.Id
+        };
+        var retained = new Item { LegacyId = 2, RelativePath = "retained.zip", Title = "Retained", VolumeId = volume.Id };
+        var existingShelf = new Shelf { Title = "Existing shelf", Type = 0 };
+        existing.ShelfIds.Add(existingShelf.Id);
+        retained.ShelfIds.Add(existingShelf.Id);
+        existingShelf.ItemIds.AddRange(new[] { existing.Id, retained.Id });
+        var context = new StackroomImportMergeContext(
+            new[] { existing, retained }, new[] { existingShelf }, new[] { volume });
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sampleXml));
+
+        var result = await new StackroomXmlImporter().ImportAsync(stream, context);
+
+        var added = Assert.Single(result.ImportedBooks);
+        Assert.Equal(3, added.LegacyId);
+        Assert.Equal("shared.zip", added.RelativePath);
+        Assert.Equal("New genre", added.Genre);
+        Assert.Equal("New relation", added.Relation);
+        Assert.Equal("lowercase memo", added.Memo);
+        Assert.Equal("Locally edited title", existing.Title);
+        Assert.Equal("Genre", existing.Genre);
+        Assert.Equal("Relation", existing.Relation);
+        Assert.Equal("Actual memo", existing.Memo);
+        Assert.Equal("A", existing.KeywordA);
+        Assert.Equal("B", existing.KeywordB);
+
+        Assert.Equal(3, existingShelf.ItemIds.Count);
+        Assert.Contains(retained.Id, existingShelf.ItemIds);
+        Assert.Contains(added.Id, existingShelf.ItemIds);
+        Assert.Contains(existingShelf.Id, added.ShelfIds);
+        var newShelf = Assert.Single(result.ImportedShelves);
+        Assert.Equal("New shelf", newShelf.Title);
+        Assert.Contains(added.Id, newShelf.ItemIds);
+        Assert.Contains(newShelf.Id, added.ShelfIds);
+        Assert.Contains(existing, result.UpdatedExistingBooks);
+    }
+
+    [Fact]
+    public async Task ImportAsync_UsesCoverPathWhenPathIsMissing()
+    {
+        const string xml = "<plist><dict><key>Books</key><dict><key>25192</key><dict>" +
+            "<key>ID</key><integer>25192</integer><key>Title</key><string>Cover path only</string>" +
+            "<key>Cover Image Path</key><string>/Volumes/Files/files/com/book.zip</string>" +
+            "</dict></dict></dict></plist>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        var result = await new StackroomXmlImporter().ImportAsync(stream);
+
+        var book = Assert.Single(result.ImportedBooks);
+        Assert.Equal("files/com/book.zip", book.RelativePath);
+        Assert.Equal("/Volumes/Files", Assert.Single(result.DiscoveredVolumes).LastKnownPath);
     }
 
     [Fact]

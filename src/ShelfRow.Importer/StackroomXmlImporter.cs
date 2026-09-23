@@ -16,7 +16,11 @@ public class StackroomImportResult
     public List<Item> ImportedBooks { get; } = new();
     public List<Shelf> ImportedShelves { get; } = new();
     public List<Volume> DiscoveredVolumes { get; } = new();
-    public List<Item> ItemsWithUpdatedShelfMembership { get; } = new();
+    /// <summary>
+    /// Existing rows whose missing metadata or shelf membership was filled during an
+    /// incremental import. Callers must persist these alongside newly imported books.
+    /// </summary>
+    public List<Item> UpdatedExistingBooks { get; } = new();
     public int SkippedBooks { get; internal set; }
     public int SkippedShelves { get; internal set; }
 }
@@ -65,7 +69,7 @@ public class StackroomXmlImporter
         var booksDict = rootDict.TryGetValue("Books", out var b) && b is Dictionary<string, object?> bd ? bd : new();
         var playlistsArray = rootDict.TryGetValue("Playlists", out var p) && p is List<object?> pa ? pa : new();
 
-        int totalBooks = booksDict.Count;
+        int totalBooks = booksDict.Count(entry => entry.Value is Dictionary<string, object?>);
         int totalShelves = playlistsArray.Count;
         progress?.Report(new ImportProgress(0, totalBooks, 0, totalShelves));
 
@@ -92,11 +96,12 @@ public class StackroomXmlImporter
             }
         }
 
-        var existingShelfKeys = new HashSet<(string Title, int Type)>(
-            mergeContext.ExistingShelves.Select(shelf => (shelf.Title, shelf.Type)));
+        var existingShelvesByKey = mergeContext.ExistingShelves
+            .GroupBy(shelf => (shelf.Title, shelf.Type))
+            .ToDictionary(group => group.Key, group => group.First());
         var importedItemsByLegacyId = new Dictionary<int, Item>();
         var importedItemIds = new HashSet<Guid>();
-        var membershipUpdates = new HashSet<Guid>();
+        var existingItemUpdates = new HashSet<Guid>();
 
         // 1. Process Books
         int booksProcessed = 0;
@@ -107,28 +112,81 @@ public class StackroomXmlImporter
                 continue;
 
             int? legacyId = bookData.TryGetValue("ID", out var idObj) && idObj is long idL ? (int)idL : null;
-            string filePath = bookData.TryGetValue("Path", out var pathObj) && pathObj is string sPath ? sPath : string.Empty;
+            string explicitPath = bookData.TryGetValue("Path", out var pathObj) && pathObj is string sPath ? sPath : string.Empty;
+            string coverPath = bookData.TryGetValue("Cover Image Path", out var coverPathObj) && coverPathObj is string sCoverPath
+                ? sCoverPath
+                : string.Empty;
+            string filePath = string.IsNullOrEmpty(explicitPath) ? coverPath : explicitPath;
 
             var (volumePath, volumeName, relativePath) = VolumePathResolver.SplitPosixPath(filePath);
+
+            string genre = GetString(bookData, "Genre");
+            string relation = GetString(bookData, "Neta");
+            string keywordA = GetString(bookData, "Keyword A");
+            string keywordB = GetString(bookData, "Keyword B");
+            string memo = GetString(bookData, "Memo");
+            if (string.IsNullOrEmpty(memo))
+                memo = GetString(bookData, "memo");
 
             Item? existingItem = null;
             if (legacyId.HasValue)
             {
+                // Stackroom IDs are authoritative. The same archive path may
+                // intentionally be registered again under a new ID.
                 existingItemsByLegacyId.TryGetValue(legacyId.Value, out existingItem);
             }
-            if (existingItem is null && !string.IsNullOrWhiteSpace(relativePath))
+            else if (!string.IsNullOrWhiteSpace(relativePath))
             {
                 existingItemsByPath.TryGetValue(relativePath, out existingItem);
             }
 
             if (existingItem is not null)
             {
+                bool relationWasStoredAsMemo = !string.IsNullOrEmpty(relation)
+                    && string.IsNullOrEmpty(existingItem.Relation)
+                    && existingItem.Memo == relation;
+                bool changed = false;
+                if (string.IsNullOrEmpty(existingItem.Genre) && !string.IsNullOrEmpty(genre))
+                {
+                    existingItem.Genre = genre;
+                    changed = true;
+                }
+                if (string.IsNullOrEmpty(existingItem.Relation) && !string.IsNullOrEmpty(relation))
+                {
+                    existingItem.Relation = relation;
+                    changed = true;
+                }
+                if (string.IsNullOrEmpty(existingItem.KeywordA) && !string.IsNullOrEmpty(keywordA))
+                {
+                    existingItem.KeywordA = keywordA;
+                    changed = true;
+                }
+                if (string.IsNullOrEmpty(existingItem.KeywordB) && !string.IsNullOrEmpty(keywordB))
+                {
+                    existingItem.KeywordB = keywordB;
+                    changed = true;
+                }
+                if ((string.IsNullOrEmpty(existingItem.Memo) || relationWasStoredAsMemo)
+                    && existingItem.Memo != memo)
+                {
+                    existingItem.Memo = memo;
+                    changed = true;
+                }
+
                 if (legacyId.HasValue)
                 {
+                    if (!existingItem.LegacyId.HasValue)
+                    {
+                        existingItem.LegacyId = legacyId.Value;
+                        changed = true;
+                    }
                     importedItemsByLegacyId[legacyId.Value] = existingItem;
+                    existingItemsByLegacyId[legacyId.Value] = existingItem;
                     await CopyLegacyThumbnailIfMissingAsync(
                         mergeContext, legacyId.Value, existingItem.Id, cancellationToken);
                 }
+                if (changed && existingItemUpdates.Add(existingItem.Id))
+                    result.UpdatedExistingBooks.Add(existingItem);
                 result.SkippedBooks++;
                 booksProcessed++;
                 if (booksProcessed % 100 == 0 || booksProcessed == totalBooks)
@@ -164,9 +222,11 @@ public class StackroomXmlImporter
                 FileType = bookData.TryGetValue("File Type", out var ftObj) && ftObj is long ftL ? (int)ftL : 0,
                 CoverImageName = bookData.TryGetValue("Cover Image Name", out var cinObj) && cinObj is string cin ? cin : string.Empty,
                 CoverImagePath = bookData.TryGetValue("Cover Image Path", out var cipObj) && cipObj is string cip ? cip : string.Empty,
-                KeywordA = bookData.TryGetValue("Keyword A", out var kaObj) && kaObj is string ka ? ka : string.Empty,
-                KeywordB = bookData.TryGetValue("Keyword B", out var kbObj) && kbObj is string kb ? kb : string.Empty,
-                Memo = bookData.TryGetValue("Neta", out var nObj) && nObj is string memo ? memo : string.Empty,
+                Genre = genre,
+                Relation = relation,
+                KeywordA = keywordA,
+                KeywordB = keywordB,
+                Memo = memo,
                 AddedDate = bookData.TryGetValue("Date Added", out var daObj) && daObj is DateTime dtAdded ? dtAdded : DateTime.UtcNow,
                 LastReadDate = bookData.TryGetValue("Play Date", out var pdObj) && pdObj is DateTime dtPlay ? dtPlay : null
             };
@@ -207,8 +267,18 @@ public class StackroomXmlImporter
             int icon = pData.TryGetValue("Icon", out var iObj) && iObj is long iL ? (int)iL : 0;
             int type = pData.TryGetValue("Type", out var typeObj) && typeObj is long typL ? (int)typL : 0;
 
-            if (existingShelfKeys.Contains((title, type)))
+            if (existingShelvesByKey.TryGetValue((title, type), out var existingShelf))
             {
+                if (type == 0 && pData.TryGetValue("Items", out var existingItemsObj) && existingItemsObj is List<object?> existingItemsList)
+                {
+                    MergeShelfMembership(
+                        existingShelf,
+                        existingItemsList,
+                        importedItemsByLegacyId,
+                        importedItemIds,
+                        existingItemUpdates,
+                        result);
+                }
                 result.SkippedShelves++;
                 shelvesProcessed++;
                 progress?.Report(new ImportProgress(totalBooks, totalBooks, shelvesProcessed, totalShelves));
@@ -243,32 +313,53 @@ public class StackroomXmlImporter
             // Associate items for standard shelf
             if (type == 0 && pData.TryGetValue("Items", out var itemsObj) && itemsObj is List<object?> itemsList)
             {
-                foreach (var itemRef in itemsList)
-                {
-                    if (itemRef is long legacyId && importedItemsByLegacyId.TryGetValue((int)legacyId, out var matchedItem))
-                    {
-                        shelf.ItemIds.Add(matchedItem.Id);
-                        if (!matchedItem.ShelfIds.Contains(shelf.Id))
-                        {
-                            matchedItem.ShelfIds.Add(shelf.Id);
-                            if (!importedItemIds.Contains(matchedItem.Id)
-                                && membershipUpdates.Add(matchedItem.Id))
-                            {
-                                result.ItemsWithUpdatedShelfMembership.Add(matchedItem);
-                            }
-                        }
-                    }
-                }
+                MergeShelfMembership(
+                    shelf,
+                    itemsList,
+                    importedItemsByLegacyId,
+                    importedItemIds,
+                    existingItemUpdates,
+                    result);
             }
 
             result.ImportedShelves.Add(shelf);
-            existingShelfKeys.Add((title, type));
+            existingShelvesByKey[(title, type)] = shelf;
             shelvesProcessed++;
             progress?.Report(new ImportProgress(totalBooks, totalBooks, shelvesProcessed, totalShelves));
         }
 
         return result;
     }
+
+    private static void MergeShelfMembership(
+        Shelf shelf,
+        IEnumerable<object?> itemReferences,
+        IReadOnlyDictionary<int, Item> itemsByLegacyId,
+        IReadOnlySet<Guid> importedItemIds,
+        ISet<Guid> existingItemUpdates,
+        StackroomImportResult result)
+    {
+        var presentItemIds = new HashSet<Guid>(shelf.ItemIds);
+        foreach (var itemReference in itemReferences)
+        {
+            if (itemReference is not long legacyId
+                || !itemsByLegacyId.TryGetValue((int)legacyId, out var item))
+                continue;
+
+            if (presentItemIds.Add(item.Id))
+                shelf.ItemIds.Add(item.Id);
+
+            if (!item.ShelfIds.Contains(shelf.Id))
+            {
+                item.ShelfIds.Add(shelf.Id);
+                if (!importedItemIds.Contains(item.Id) && existingItemUpdates.Add(item.Id))
+                    result.UpdatedExistingBooks.Add(item);
+            }
+        }
+    }
+
+    private static string GetString(IReadOnlyDictionary<string, object?> values, string key) =>
+        values.TryGetValue(key, out var value) && value is string text ? text : string.Empty;
 
     private static async Task CopyLegacyThumbnailIfMissingAsync(
         StackroomImportMergeContext context,

@@ -1184,7 +1184,7 @@ public class MainViewModel : INotifyPropertyChanged
             }
 
             var itemsToSave = result.ImportedBooks
-                .Concat(result.ItemsWithUpdatedShelfMembership)
+                .Concat(result.UpdatedExistingBooks)
                 .ToList();
             if (itemsToSave.Count > 0)
             {
