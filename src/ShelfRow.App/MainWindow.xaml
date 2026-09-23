@@ -508,7 +508,7 @@
 
                                     <!-- Rating Stars: directly editable, matching the inspector. -->
                                     <RatingControl Grid.Column="{x:Bind ListLayout.RatingColumn}" Visibility="{x:Bind ListLayout.RatingVisibility, Mode=OneWay}" Value="{x:Bind RatingValue, Mode=TwoWay}"
-                                                   MaxRating="5" IsClearEnabled="True" FontSize="16" HorizontalAlignment="Left"
+                                                   MaxRating="5" IsClearEnabled="True" FontSize="14" HorizontalAlignment="Left"
                                                    Loaded="EditableRating_Loaded" Unloaded="EditableRating_Unloaded">
                                         <RatingControl.Resources>
                                             <SolidColorBrush x:Key="RatingControlSelectedForeground" Color="#EAB308" />
