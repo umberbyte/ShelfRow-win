@@ -54,6 +54,8 @@ public sealed partial class PreferencesWindow : Window
             }
         }
         ToggleCompactDisplay.IsOn = _settings.CompactDisplay;
+        ToggleGlobalColumnOrder.IsOn = _settings.ListColumnOrderAppliesGlobally;
+        ToggleGlobalColumnWidth.IsOn = _settings.ListColumnWidthAppliesGlobally;
         ToggleCloseOnExit.IsOn = _settings.CloseOnExit;
 
         // Viewer
@@ -113,6 +115,8 @@ public sealed partial class PreferencesWindow : Window
             _settings.AppearanceMode = selectedItem.Tag.ToString()!;
         }
         _settings.CompactDisplay = ToggleCompactDisplay.IsOn;
+        _settings.ListColumnOrderAppliesGlobally = ToggleGlobalColumnOrder.IsOn;
+        _settings.ListColumnWidthAppliesGlobally = ToggleGlobalColumnWidth.IsOn;
         _settings.CloseOnExit = ToggleCloseOnExit.IsOn;
 
         // Viewer
@@ -188,6 +192,85 @@ public sealed partial class PreferencesWindow : Window
     {
         TxtPasswordValue.IsEnabled = TogglePasswordLock.IsOn;
         SaveSettingsFromUI();
+    }
+
+    private async void ToggleGlobalColumnOrder_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+        if (!ToggleGlobalColumnOrder.IsOn)
+        {
+            SaveSettingsFromUI();
+            return;
+        }
+
+        if (_settings.ListColumnOrderAppliesGlobally)
+        {
+            SaveSettingsFromUI();
+            return;
+        }
+
+        bool confirmed = await ConfirmDiscardScopedSettingsAsync(
+            "列の並び順を全体設定に戻しますか？",
+            "シェルフごとに保存した列の並び順は削除され、元に戻せません。");
+        if (confirmed)
+        {
+            _settings.ListColumnOrdersByCollection?.Clear();
+            SaveSettingsFromUI();
+        }
+        else
+        {
+            _isInitializing = true;
+            ToggleGlobalColumnOrder.IsOn = false;
+            _isInitializing = false;
+        }
+    }
+
+    private async void ToggleGlobalColumnWidth_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+        if (!ToggleGlobalColumnWidth.IsOn)
+        {
+            SaveSettingsFromUI();
+            return;
+        }
+
+        if (_settings.ListColumnWidthAppliesGlobally)
+        {
+            SaveSettingsFromUI();
+            return;
+        }
+
+        bool confirmed = await ConfirmDiscardScopedSettingsAsync(
+            "列幅を全体設定に戻しますか？",
+            "シェルフごとに保存した列幅は削除され、元に戻せません。");
+        if (confirmed)
+        {
+            _settings.ListColumnWidthsByCollection?.Clear();
+            SaveSettingsFromUI();
+        }
+        else
+        {
+            _isInitializing = true;
+            ToggleGlobalColumnWidth.IsOn = false;
+            _isInitializing = false;
+        }
+    }
+
+    private async Task<bool> ConfirmDiscardScopedSettingsAsync(string title, string message)
+    {
+        if (Content?.XamlRoot is not { } root)
+            return false;
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = message,
+            PrimaryButtonText = "OK",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     private void PrefNavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

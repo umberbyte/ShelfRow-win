@@ -79,6 +79,34 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="列の並び順" FontWeight="Medium" />
+                                        <TextBlock Text="オフにすると、リストの列順をシェルフごとに保存します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" x:Name="ToggleGlobalColumnOrder" Header="全体に適用" Toggled="ToggleGlobalColumnOrder_Toggled" />
+                                </Grid>
+
+                                <MenuFlyoutSeparator />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="列の幅" FontWeight="Medium" />
+                                        <TextBlock Text="オフにすると、リストの列幅をシェルフごとに保存します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" x:Name="ToggleGlobalColumnWidth" Header="全体に適用" Toggled="ToggleGlobalColumnWidth_Toggled" />
+                                </Grid>
+
+                                <MenuFlyoutSeparator />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2">
                                         <TextBlock Text="表示を縮小" FontWeight="Medium" />
                                         <TextBlock Text="左右のペインとツールバーをコンパクトにし、本の一覧に表示領域を回します。" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>

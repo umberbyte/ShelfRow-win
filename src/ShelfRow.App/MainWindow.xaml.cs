@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -21,6 +22,15 @@ public sealed partial class MainWindow : Window
     private string _stampTarget = "KeywordA";
     private int _lastRestoredWidth = 1280;
     private int _lastRestoredHeight = 800;
+    private string? _draggedColumnId;
+    private Border? _resizeGrip;
+    private Grid? _resizeHeaderGrid;
+    private string? _resizingColumnId;
+    private uint _resizePointerId;
+    private double _resizeStartX;
+    private double _resizeStartLogicalWidth;
+    private double _resizeCurrentLogicalWidth;
+    private GridLength _resizeOriginalGridLength;
     private readonly ConditionalWeakTable<RatingControl, RatingPressState> _ratingPressStates = new();
 
     private sealed class RatingPressState
@@ -597,16 +607,136 @@ public sealed partial class MainWindow : Window
     }
 
     private void SortByBookType_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("BookType");
+    private void SortByUnread_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Unread");
     private void SortByTitle_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Title");
     private void SortByRating_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Rating");
     private void SortByAuthor_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Author");
     private void SortByGenre_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Genre");
+    private void SortByRelation_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Relation");
+    private void SortByKeywordA_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("KeywordA");
+    private void SortByKeywordB_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("KeywordB");
+    private void SortByLastReadDate_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("LastReadDate");
     private void SortByAddedDate_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("AddedDate");
     private void SortByPages_Click(object sender, RoutedEventArgs e) => _viewModel?.SetSortKey("Pages");
 
     private void ToggleSortDirection_Click(object sender, RoutedEventArgs e)
     {
         _viewModel?.ToggleSortDirection();
+    }
+
+    private void ColumnMenu_Opening(object sender, object e)
+    {
+        if (_viewModel is null || sender is not MenuFlyout menu)
+            return;
+
+        foreach (var item in menu.Items.OfType<ToggleMenuFlyoutItem>())
+            if (item.Tag is string id)
+                item.IsChecked = id == "title" || _viewModel.IsListColumnVisible(id);
+    }
+
+    private void ToggleColumnVisibility_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleMenuFlyoutItem { Tag: string id })
+            _viewModel?.ToggleListColumn(id);
+    }
+
+    private void ColumnHeader_DragStarting(UIElement sender, DragStartingEventArgs args)
+    {
+        _draggedColumnId = (sender as FrameworkElement)?.Tag as string;
+        if (_draggedColumnId is null)
+        {
+            args.Cancel = true;
+            return;
+        }
+        args.Data.SetText(_draggedColumnId);
+        args.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+    }
+
+    private void ColumnHeader_DragOver(object sender, DragEventArgs e)
+    {
+        e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+        e.Handled = true;
+    }
+
+    private void ColumnHeader_Drop(object sender, DragEventArgs e)
+    {
+        if (_draggedColumnId is not null && sender is FrameworkElement { Tag: string targetId })
+            _viewModel?.MoveListColumn(_draggedColumnId, targetId);
+        _draggedColumnId = null;
+        e.Handled = true;
+    }
+
+    private void ColumnResize_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_viewModel is null
+            || sender is not Border { Tag: string id } grip
+            || grip.Parent is not Grid headerGrid)
+            return;
+
+        int columnIndex = Grid.GetColumn(grip);
+        if (columnIndex < 0 || columnIndex >= headerGrid.ColumnDefinitions.Count)
+            return;
+
+        _resizeGrip = grip;
+        _resizeHeaderGrid = headerGrid;
+        _resizingColumnId = id;
+        _resizePointerId = e.Pointer.PointerId;
+        _resizeStartX = e.GetCurrentPoint(headerGrid).Position.X;
+        double scale = _viewModel.Settings.CompactDisplay ? 0.75 : 1;
+        _resizeStartLogicalWidth = headerGrid.ColumnDefinitions[columnIndex].ActualWidth / scale;
+        _resizeCurrentLogicalWidth = _resizeStartLogicalWidth;
+        _resizeOriginalGridLength = headerGrid.ColumnDefinitions[columnIndex].Width;
+        grip.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void ColumnResize_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_viewModel is null || _resizeGrip is null || _resizeHeaderGrid is null
+            || _resizingColumnId is null || e.Pointer.PointerId != _resizePointerId
+            || !e.GetCurrentPoint(_resizeGrip).Properties.IsLeftButtonPressed
+            || !LibraryListColumns.TryParse(_resizingColumnId, out LibraryListColumn column))
+            return;
+
+        double scale = _viewModel.Settings.CompactDisplay ? 0.75 : 1;
+        double delta = (e.GetCurrentPoint(_resizeHeaderGrid).Position.X - _resizeStartX) / scale;
+        _resizeCurrentLogicalWidth = LibraryListColumns.ClampWidth(column, _resizeStartLogicalWidth + delta);
+        int columnIndex = Grid.GetColumn(_resizeGrip);
+        _resizeHeaderGrid.ColumnDefinitions[columnIndex].Width = new GridLength(_resizeCurrentLogicalWidth * scale);
+        e.Handled = true;
+    }
+
+    private void ColumnResize_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_resizeGrip is null || _resizingColumnId is null || e.Pointer.PointerId != _resizePointerId)
+            return;
+
+        string id = _resizingColumnId;
+        double width = _resizeCurrentLogicalWidth;
+        _resizeGrip.ReleasePointerCapture(e.Pointer);
+        ClearColumnResizeState();
+        _viewModel?.SetListColumnWidth(id, width);
+        e.Handled = true;
+    }
+
+    private void ColumnResize_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (_resizeGrip is null || _resizeHeaderGrid is null || e.Pointer.PointerId != _resizePointerId)
+            return;
+
+        int columnIndex = Grid.GetColumn(_resizeGrip);
+        _resizeHeaderGrid.ColumnDefinitions[columnIndex].Width = _resizeOriginalGridLength;
+        _resizeGrip.ReleasePointerCapture(e.Pointer);
+        ClearColumnResizeState();
+        e.Handled = true;
+    }
+
+    private void ClearColumnResizeState()
+    {
+        _resizeGrip = null;
+        _resizeHeaderGrid = null;
+        _resizingColumnId = null;
+        _resizePointerId = 0;
     }
 
     #endregion

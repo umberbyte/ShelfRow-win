@@ -77,6 +77,7 @@ public class MainViewModel : INotifyPropertyChanged
         _isGridView = _settingsService.Current.MainViewIsGrid;
         _sortKey = _settingsService.Current.MainSortKey;
         _sortAscending = _settingsService.Current.MainSortAscending;
+        ListLayout = BuildListLayout();
 
         Volumes.CollectionChanged += (s, e) =>
         {
@@ -111,6 +112,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<string> Stamps { get; }
 
     public AppSettings Settings => _settingsService.Current;
+    public LibraryListLayout ListLayout { get; }
     public CoverGenerationService? CoverGenerator => _coverGenerator;
     public string AuthorFieldLabel => Settings.EffectiveAuthorLabel + ":";
     public string GenreFieldLabel => Settings.EffectiveGenreLabel + ":";
@@ -142,6 +144,7 @@ public class MainViewModel : INotifyPropertyChanged
             nameof(TypeName3), nameof(TypeName4), nameof(TypeName5), nameof(SortKeyLabel),
             nameof(AuthorSortHeader), nameof(GenreSortHeader)
         }) OnPropertyChanged(property);
+        RefreshListLayout();
         Stamps.Clear();
         foreach (string stamp in ParseStamps(Settings.StampsList)) Stamps.Add(stamp);
         ApplyFilterAndSort();
@@ -267,6 +270,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     public string SortKeyLabel => SortKey switch
     {
+        "Unread" => "未読",
+        "Relation" => Settings.EffectiveRelationLabel,
+        "KeywordA" => Settings.EffectiveKeywordALabel,
+        "KeywordB" => Settings.EffectiveKeywordBLabel,
+        "LastReadDate" => "読んだ日",
         "BookType" => "種別",
         "Rating" => "レート",
         "Author" => Settings.EffectiveAuthorLabel,
@@ -283,11 +291,22 @@ public class MainViewModel : INotifyPropertyChanged
     public string GenreSortHeader => SortHeader(Settings.EffectiveGenreLabel, "Genre");
     public string AddedDateSortHeader => SortHeader("登録日", "AddedDate");
 
+    public string UnreadSortHeader => SortHeader("未読", "Unread");
+    public string RelationSortHeader => SortHeader(Settings.EffectiveRelationLabel, "Relation");
+    public string KeywordASortHeader => SortHeader(Settings.EffectiveKeywordALabel, "KeywordA");
+    public string KeywordBSortHeader => SortHeader(Settings.EffectiveKeywordBLabel, "KeywordB");
+    public string LastReadDateSortHeader => SortHeader("読んだ日", "LastReadDate");
+
     private string SortHeader(string label, string key) =>
         SortKey == key ? $"{label} {(SortAscending ? "▲" : "▼")}" : label;
 
     private void NotifySortHeaderProperties()
     {
+        OnPropertyChanged(nameof(UnreadSortHeader));
+        OnPropertyChanged(nameof(RelationSortHeader));
+        OnPropertyChanged(nameof(KeywordASortHeader));
+        OnPropertyChanged(nameof(KeywordBSortHeader));
+        OnPropertyChanged(nameof(LastReadDateSortHeader));
         OnPropertyChanged(nameof(BookTypeSortHeader));
         OnPropertyChanged(nameof(TitleSortHeader));
         OnPropertyChanged(nameof(RatingSortHeader));
@@ -320,6 +339,118 @@ public class MainViewModel : INotifyPropertyChanged
     public void ToggleSortDirection()
     {
         SortAscending = !SortAscending;
+    }
+
+    public bool IsListColumnVisible(string? id) =>
+        LibraryListColumns.TryParse(id, out LibraryListColumn column) && ListLayout.IsVisible(column);
+
+    public void ToggleListColumn(string? id)
+    {
+        if (!LibraryListColumns.TryParse(id, out LibraryListColumn column) || column == LibraryListColumn.Title)
+            return;
+
+        var visible = ParseVisibleColumns();
+        if (!visible.Add(column))
+            visible.Remove(column);
+        Settings.ListVisibleColumns = string.Join(',', LibraryListColumns.Toggleable
+            .Where(visible.Contains)
+            .Select(LibraryListColumns.Id));
+        _settingsService.Save();
+        RefreshListLayout();
+    }
+
+    public void MoveListColumn(string? sourceId, string? targetId)
+    {
+        if (!LibraryListColumns.TryParse(sourceId, out LibraryListColumn source)
+            || !LibraryListColumns.TryParse(targetId, out LibraryListColumn target))
+            return;
+
+        string encoded = LibraryListColumns.EncodeOrder(
+            LibraryListColumns.Move(source, target, CurrentColumnOrder()));
+        if (Settings.ListColumnOrderAppliesGlobally)
+            Settings.ListColumnOrderGlobal = encoded;
+        else
+            (Settings.ListColumnOrdersByCollection ??= new())[CurrentColumnScope] = encoded;
+        _settingsService.Save();
+        RefreshListLayout();
+    }
+
+    public double GetListColumnWidth(string? id) =>
+        LibraryListColumns.TryParse(id, out LibraryListColumn column)
+            ? ListLayout.LogicalWidth(column)
+            : 0;
+
+    public void SetListColumnWidth(string? id, double width)
+    {
+        if (!LibraryListColumns.TryParse(id, out LibraryListColumn column)
+            || !LibraryListColumns.IsResizable(column))
+            return;
+
+        width = LibraryListColumns.ClampWidth(column, width);
+        if (Settings.ListColumnWidthAppliesGlobally)
+            (Settings.ListColumnWidthsGlobal ??= new())[LibraryListColumns.Id(column)] = width;
+        else
+        {
+            Settings.ListColumnWidthsByCollection ??= new();
+            if (!Settings.ListColumnWidthsByCollection.TryGetValue(CurrentColumnScope, out var widths))
+            {
+                widths = new Dictionary<string, double>(Settings.ListColumnWidthsGlobal ?? new());
+                Settings.ListColumnWidthsByCollection[CurrentColumnScope] = widths;
+            }
+            widths[LibraryListColumns.Id(column)] = width;
+        }
+        _settingsService.Save();
+        RefreshListLayout();
+    }
+
+    private string CurrentColumnScope => _selectedShelf is not null
+        ? $"shelf.{_selectedShelf.Id}"
+        : _isUnreadCollectionSelected ? "library.unread" : "library.all";
+
+    private IReadOnlyList<LibraryListColumn> CurrentColumnOrder()
+    {
+        string raw = Settings.ListColumnOrderGlobal;
+        if (!Settings.ListColumnOrderAppliesGlobally
+            && Settings.ListColumnOrdersByCollection is not null
+            && Settings.ListColumnOrdersByCollection.TryGetValue(CurrentColumnScope, out string? scoped))
+            raw = scoped;
+        return LibraryListColumns.DecodeOrder(raw);
+    }
+
+    private HashSet<LibraryListColumn> ParseVisibleColumns()
+    {
+        var visible = new HashSet<LibraryListColumn> { LibraryListColumn.Title };
+        foreach (string id in (Settings.ListVisibleColumns ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (LibraryListColumns.TryParse(id, out LibraryListColumn column))
+                visible.Add(column);
+        return visible;
+    }
+
+    private Dictionary<LibraryListColumn, double> CurrentColumnWidths()
+    {
+        IReadOnlyDictionary<string, double> stored = Settings.ListColumnWidthsGlobal
+            ?? new Dictionary<string, double>();
+        if (!Settings.ListColumnWidthAppliesGlobally
+            && Settings.ListColumnWidthsByCollection is not null
+            && Settings.ListColumnWidthsByCollection.TryGetValue(CurrentColumnScope, out var scoped))
+            stored = scoped;
+
+        var result = new Dictionary<LibraryListColumn, double>();
+        foreach (var pair in stored)
+            if (LibraryListColumns.TryParse(pair.Key, out LibraryListColumn column))
+                result[column] = LibraryListColumns.ClampWidth(column, pair.Value);
+        return result;
+    }
+
+    private LibraryListLayout BuildListLayout() => new(
+        CurrentColumnOrder(), ParseVisibleColumns(), CurrentColumnWidths(), Settings.CompactDisplay);
+
+    private void RefreshListLayout()
+    {
+        ListLayout.Update(
+            CurrentColumnOrder(), ParseVisibleColumns(), CurrentColumnWidths(), Settings.CompactDisplay);
+        OnPropertyChanged(nameof(ListLayout));
     }
 
     #endregion
@@ -471,6 +602,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _selectedShelf = value;
             _isUnreadCollectionSelected = false;
+            RefreshListLayout();
             OnPropertyChanged();
             CurrentCollectionTitle = _selectedShelf?.Title ?? "すべての項目";
 
@@ -485,6 +617,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _selectedShelf = null;
         _isUnreadCollectionSelected = false;
+        RefreshListLayout();
         CurrentCollectionTitle = "すべての項目";
         OnPropertyChanged(nameof(SelectedShelf));
         _ = RefreshBooksAsync();
@@ -494,6 +627,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _selectedShelf = null;
         _isUnreadCollectionSelected = true;
+        RefreshListLayout();
         CurrentCollectionTitle = "未読";
         OnPropertyChanged(nameof(SelectedShelf));
         _ = RefreshBooksAsync();
@@ -616,17 +750,22 @@ public class MainViewModel : INotifyPropertyChanged
         // Sorting
         query = SortKey switch
         {
+            "Unread" => SortAscending ? query.OrderByDescending(i => i.IsUnread).ThenBy(i => i.Title) : query.OrderBy(i => i.IsUnread).ThenBy(i => i.Title),
             "BookType" => SortAscending ? query.OrderBy(i => i.BookType).ThenBy(i => i.Title) : query.OrderByDescending(i => i.BookType).ThenBy(i => i.Title),
             "Rating" => SortAscending ? query.OrderBy(i => i.Rating).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Rating).ThenBy(i => i.Title),
             "Author" => SortAscending ? query.OrderBy(i => i.Author).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Author).ThenBy(i => i.Title),
             "Genre" => SortAscending ? query.OrderBy(i => i.Genre).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Genre).ThenBy(i => i.Title),
+            "Relation" => SortAscending ? query.OrderBy(i => i.Relation).ThenBy(i => i.Title) : query.OrderByDescending(i => i.Relation).ThenBy(i => i.Title),
+            "KeywordA" => SortAscending ? query.OrderBy(i => i.KeywordA).ThenBy(i => i.Title) : query.OrderByDescending(i => i.KeywordA).ThenBy(i => i.Title),
+            "KeywordB" => SortAscending ? query.OrderBy(i => i.KeywordB).ThenBy(i => i.Title) : query.OrderByDescending(i => i.KeywordB).ThenBy(i => i.Title),
+            "LastReadDate" => SortAscending ? query.OrderBy(i => i.LastReadDate) : query.OrderByDescending(i => i.LastReadDate),
             "AddedDate" => SortAscending ? query.OrderBy(i => i.AddedDate) : query.OrderByDescending(i => i.AddedDate),
             "Pages" => SortAscending ? query.OrderBy(i => i.Pages) : query.OrderByDescending(i => i.Pages),
             _ => SortAscending ? query.OrderBy(i => i.Title) : query.OrderByDescending(i => i.Title)
         };
 
         var filteredList = query.Select(item => new ItemViewModel(
-            item, _thumbnailManager, _imageLoader, OnItemModelChanged, _coverGenerator)).ToList();
+            item, _thumbnailManager, _imageLoader, OnItemModelChanged, _coverGenerator, ListLayout)).ToList();
 
         RunOnUI(() =>
         {

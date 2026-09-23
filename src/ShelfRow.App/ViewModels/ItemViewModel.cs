@@ -26,17 +26,24 @@ public class ItemViewModel : INotifyPropertyChanged
         ThumbnailStorageManager thumbnailManager,
         ThumbnailImageLoader? imageLoader = null,
         Action<Item>? onModelChanged = null,
-        CoverGenerationService? coverGenerator = null)
+        CoverGenerationService? coverGenerator = null,
+        LibraryListLayout? listLayout = null)
     {
         _model = model;
         _thumbnailManager = thumbnailManager;
         _imageLoader = imageLoader;
         _onModelChanged = onModelChanged;
         _coverGenerator = coverGenerator;
+        ListLayout = listLayout ?? new LibraryListLayout(
+            LibraryListColumns.Canonical,
+            LibraryListColumns.Canonical,
+            null,
+            compactDisplay: false);
     }
 
     public Item Model => _model;
     public Guid Id => _model.Id;
+    public LibraryListLayout ListLayout { get; }
 
     public string Title
     {
@@ -235,6 +242,8 @@ public class ItemViewModel : INotifyPropertyChanged
 
     public string AddedDateText => $"登録日: {_model.AddedDate:yyyy/MM/dd}";
     public string LastReadDateText => _model.LastReadDate.HasValue ? $"読込日: {_model.LastReadDate.Value:yyyy/MM/dd}" : string.Empty;
+    public string AddedDateListText => _model.AddedDate.ToString("yyyy/MM/dd");
+    public string LastReadDateListText => _model.LastReadDate?.ToString("yyyy/MM/dd") ?? string.Empty;
     public string PagesText => _model.Pages > 0 ? $"ページ数: {_model.Pages}p" : string.Empty;
 
     public string RatingStarsText

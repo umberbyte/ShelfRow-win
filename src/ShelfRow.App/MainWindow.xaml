@@ -382,12 +382,27 @@
                               DoubleTapped="BookList_DoubleTapped">
                         <ListView.Header>
                             <Grid Padding="12,6" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+                                <Grid.ContextFlyout>
+                                    <MenuFlyout Opening="ColumnMenu_Opening">
+                                        <ToggleMenuFlyoutItem Text="未読" Tag="unread" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="種類" Tag="bookType" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="タイトル" Tag="title" IsChecked="True" IsEnabled="False" />
+                                        <ToggleMenuFlyoutItem Text="レート" Tag="rating" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="作者" Tag="author" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="ジャンル" Tag="genre" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="関連" Tag="relation" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="キーワードA" Tag="keywordA" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="キーワードB" Tag="keywordB" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="読んだ日" Tag="lastReadDate" Click="ToggleColumnVisibility_Click" />
+                                        <ToggleMenuFlyoutItem Text="登録日" Tag="addedDate" Click="ToggleColumnVisibility_Click" />
+                                    </MenuFlyout>
+                                </Grid.ContextFlyout>
                                 <Grid.Resources>
                                     <Style x:Key="ColumnHeaderButtonStyle" TargetType="Button">
                                         <Setter Property="MinHeight" Value="24" />
                                         <Setter Property="Padding" Value="0,2" />
                                         <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Center" />
                                         <Setter Property="Background" Value="Transparent" />
                                         <Setter Property="BorderThickness" Value="0" />
                                         <Setter Property="CornerRadius" Value="3" />
@@ -397,27 +412,64 @@
                                     </Style>
                                 </Grid.Resources>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="24" />
-                                    <ColumnDefinition Width="56" />
-                                    <ColumnDefinition Width="*" MinWidth="180" />
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="140" />
-                                    <ColumnDefinition Width="100" />
-                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot0Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot1Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot2Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot3Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot4Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot5Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot6Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot7Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot8Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot9Width, Mode=OneWay}" />
+                                    <ColumnDefinition Width="{x:Bind ViewModel.ListLayout.Slot10Width, Mode=OneWay}" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="" />
-                                <Button Grid.Column="1" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.BookTypeSortHeader, Mode=OneWay}" Click="SortByBookType_Click" />
-                                <Button Grid.Column="2" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.TitleSortHeader, Mode=OneWay}" Click="SortByTitle_Click" />
-                                <Button Grid.Column="3" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.RatingSortHeader, Mode=OneWay}" Click="SortByRating_Click" />
-                                <Button Grid.Column="4" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.AuthorSortHeader, Mode=OneWay}" Click="SortByAuthor_Click" />
-                                <Button Grid.Column="5" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.GenreSortHeader, Mode=OneWay}" Click="SortByGenre_Click" />
-                                <Button Grid.Column="6" Style="{StaticResource ColumnHeaderButtonStyle}"
-                                        Content="{x:Bind ViewModel.AddedDateSortHeader, Mode=OneWay}" Click="SortByAddedDate_Click" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.UnreadColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.UnreadVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.UnreadSortHeader, Mode=OneWay}" Click="SortByUnread_Click" Tag="unread"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.BookTypeColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.BookTypeVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.BookTypeSortHeader, Mode=OneWay}" Click="SortByBookType_Click" Tag="bookType"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.TitleColumn, Mode=OneWay}" Style="{StaticResource ColumnHeaderButtonStyle}"
+                                        Content="{x:Bind ViewModel.TitleSortHeader, Mode=OneWay}" Click="SortByTitle_Click" Tag="title"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.RatingColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.RatingVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.RatingSortHeader, Mode=OneWay}" Click="SortByRating_Click" Tag="rating"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.AuthorColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.AuthorVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.AuthorSortHeader, Mode=OneWay}" Click="SortByAuthor_Click" Tag="author"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.GenreColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.GenreVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.GenreSortHeader, Mode=OneWay}" Click="SortByGenre_Click" Tag="genre"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.RelationColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.RelationVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.RelationSortHeader, Mode=OneWay}" Click="SortByRelation_Click" Tag="relation"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.KeywordAColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.KeywordAVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.KeywordASortHeader, Mode=OneWay}" Click="SortByKeywordA_Click" Tag="keywordA"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.KeywordBColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.KeywordBVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.KeywordBSortHeader, Mode=OneWay}" Click="SortByKeywordB_Click" Tag="keywordB"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.LastReadDateColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.LastReadDateVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.LastReadDateSortHeader, Mode=OneWay}" Click="SortByLastReadDate_Click" Tag="lastReadDate"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <Button Grid.Column="{x:Bind ViewModel.ListLayout.AddedDateColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.AddedDateVisibility, Mode=OneWay}"
+                                        Style="{StaticResource ColumnHeaderButtonStyle}" Content="{x:Bind ViewModel.AddedDateSortHeader, Mode=OneWay}" Click="SortByAddedDate_Click" Tag="addedDate"
+                                        CanDrag="True" AllowDrop="True" DragStarting="ColumnHeader_DragStarting" DragOver="ColumnHeader_DragOver" Drop="ColumnHeader_Drop" />
+                                <!-- Resizable-column grips. Widths are persisted in logical (unscaled) pixels. -->
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.TitleColumn, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="title" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.AuthorColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.AuthorVisibility, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="author" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.GenreColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.GenreVisibility, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="genre" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.RelationColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.RelationVisibility, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="relation" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.KeywordAColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.KeywordAVisibility, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="keywordA" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
+                                <Border Grid.Column="{x:Bind ViewModel.ListLayout.KeywordBColumn, Mode=OneWay}" Visibility="{x:Bind ViewModel.ListLayout.KeywordBVisibility, Mode=OneWay}" Width="8" HorizontalAlignment="Right" Background="Transparent" Tag="keywordB" Canvas.ZIndex="2"
+                                        PointerPressed="ColumnResize_PointerPressed" PointerMoved="ColumnResize_PointerMoved" PointerReleased="ColumnResize_PointerReleased" PointerCanceled="ColumnResize_PointerCanceled" ToolTipService.ToolTip="ドラッグして列幅を変更" />
                             </Grid>
                         </ListView.Header>
 
@@ -428,30 +480,34 @@
                                         <MenuFlyout Opening="BookContextFlyout_Opening" />
                                     </Grid.ContextFlyout>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="24" />
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="*" MinWidth="180" />
-                                        <ColumnDefinition Width="120" />
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="100" />
-                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot0Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot1Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot2Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot3Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot4Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot5Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot6Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot7Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot8Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot9Width, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind ListLayout.Slot10Width, Mode=OneWay}" />
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Unread Circle -->
-                                    <Ellipse Grid.Column="0" Width="8" Height="8" Stroke="#22C55E" StrokeThickness="1.5"
+                                    <Ellipse Grid.Column="{x:Bind ListLayout.UnreadColumn}" Width="8" Height="8" Stroke="#22C55E" StrokeThickness="1.5"
                                              HorizontalAlignment="Center" VerticalAlignment="Center"
                                              Visibility="{x:Bind UnreadVisibility, Mode=OneWay}" />
 
                                     <!-- Book Type Icon -->
-                                    <FontIcon Grid.Column="1" Glyph="{x:Bind BookTypeGlyph, Mode=OneWay}"
+                                    <FontIcon Grid.Column="{x:Bind ListLayout.BookTypeColumn}" Visibility="{x:Bind ListLayout.BookTypeVisibility, Mode=OneWay}" Glyph="{x:Bind BookTypeGlyph, Mode=OneWay}"
                                               Foreground="{x:Bind BookTypeBrush, Mode=OneWay}"
                                               FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
                                     <!-- Title -->
-                                    <TextBlock Grid.Column="2" Text="{x:Bind Title, Mode=OneWay}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.TitleColumn}" Text="{x:Bind Title, Mode=OneWay}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                     <!-- Rating Stars: directly editable, matching the inspector. -->
-                                    <RatingControl Grid.Column="3" Value="{x:Bind RatingValue, Mode=TwoWay}"
+                                    <RatingControl Grid.Column="{x:Bind ListLayout.RatingColumn}" Visibility="{x:Bind ListLayout.RatingVisibility, Mode=OneWay}" Value="{x:Bind RatingValue, Mode=TwoWay}"
                                                    MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left"
                                                    Loaded="EditableRating_Loaded" Unloaded="EditableRating_Unloaded">
                                         <RatingControl.Resources>
@@ -463,13 +519,17 @@
                                     </RatingControl>
 
                                     <!-- Author -->
-                                    <TextBlock Grid.Column="4" Text="{x:Bind Author, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.AuthorColumn}" Visibility="{x:Bind ListLayout.AuthorVisibility, Mode=OneWay}" Text="{x:Bind Author, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                     <!-- Genre -->
-                                    <TextBlock Grid.Column="5" Text="{x:Bind Genre, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.GenreColumn}" Visibility="{x:Bind ListLayout.GenreVisibility, Mode=OneWay}" Text="{x:Bind Genre, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                     <!-- Added Date -->
-                                    <TextBlock Grid.Column="6" Text="{x:Bind AddedDateText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.RelationColumn}" Visibility="{x:Bind ListLayout.RelationVisibility, Mode=OneWay}" Text="{x:Bind Relation, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.KeywordAColumn}" Visibility="{x:Bind ListLayout.KeywordAVisibility, Mode=OneWay}" Text="{x:Bind KeywordA, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.KeywordBColumn}" Visibility="{x:Bind ListLayout.KeywordBVisibility, Mode=OneWay}" Text="{x:Bind KeywordB, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.LastReadDateColumn}" Visibility="{x:Bind ListLayout.LastReadDateVisibility, Mode=OneWay}" Text="{x:Bind LastReadDateListText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    <TextBlock Grid.Column="{x:Bind ListLayout.AddedDateColumn}" Visibility="{x:Bind ListLayout.AddedDateVisibility, Mode=OneWay}" Text="{x:Bind AddedDateListText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

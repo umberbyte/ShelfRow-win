@@ -95,8 +95,15 @@ public class AppSettings
 
     // UI View Settings
     public bool MainViewIsGrid { get; set; } = true;
-    public string MainSortKey { get; set; } = "Title"; // Title, Rating, Author, AddedDate, Pages
+    public string MainSortKey { get; set; } = "Title"; // Any list column, plus Pages
     public bool MainSortAscending { get; set; } = true;
+    public string ListVisibleColumns { get; set; } = "unread,bookType,rating,author,genre,addedDate";
+    public bool ListColumnOrderAppliesGlobally { get; set; } = true;
+    public string ListColumnOrderGlobal { get; set; } = string.Empty;
+    public Dictionary<string, string> ListColumnOrdersByCollection { get; set; } = new();
+    public bool ListColumnWidthAppliesGlobally { get; set; } = true;
+    public Dictionary<string, double> ListColumnWidthsGlobal { get; set; } = new();
+    public Dictionary<string, Dictionary<string, double>> ListColumnWidthsByCollection { get; set; } = new();
     public int MainWindowWidth { get; set; } = 1280;
     public int MainWindowHeight { get; set; } = 800;
 
