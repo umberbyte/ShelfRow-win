@@ -11,6 +11,7 @@ using Microsoft.UI.Windowing;
 using Windows.System;
 using ShelfRow.App.ViewModels;
 using ShelfRow.App.Views;
+using ShelfRow.App.Services;
 using ShelfRow.Core.Models;
 
 namespace ShelfRow.App;
@@ -43,6 +44,7 @@ public sealed partial class MainWindow : Window
     {
         this.InitializeComponent();
         Title = "ShelfRow";
+        RootGrid.ActualThemeChanged += (_, _) => WindowTitleBarTheme.Apply(this, RootGrid);
         try
         {
             this.AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 800));
@@ -174,6 +176,7 @@ public sealed partial class MainWindow : Window
             "dark" => ElementTheme.Dark,
             _ => ElementTheme.Default
         };
+        WindowTitleBarTheme.Apply(this, RootGrid);
 
         bool compact = _viewModel.Settings.CompactDisplay;
         SidebarColumn.Width = new GridLength(compact ? 195 : 260);

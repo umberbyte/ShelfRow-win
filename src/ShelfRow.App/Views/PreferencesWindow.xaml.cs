@@ -26,6 +26,8 @@ public sealed partial class PreferencesWindow : Window
     public PreferencesWindow(MainViewModel mainViewModel)
     {
         this.InitializeComponent();
+        if (Content is FrameworkElement themedRoot)
+            themedRoot.ActualThemeChanged += (_, _) => WindowTitleBarTheme.Apply(this, themedRoot);
         _mainViewModel = mainViewModel;
         _settingsService = new AppSettingsService();
         _settings = _settingsService.Current;
@@ -165,6 +167,7 @@ public sealed partial class PreferencesWindow : Window
                 "dark" => ElementTheme.Dark,
                 _ => ElementTheme.Default
             };
+            WindowTitleBarTheme.Apply(this, root);
         }
     }
 
