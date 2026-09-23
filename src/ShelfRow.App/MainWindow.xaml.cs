@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,8 +21,13 @@ public sealed partial class MainWindow : Window
     private string _stampTarget = "KeywordA";
     private int _lastRestoredWidth = 1280;
     private int _lastRestoredHeight = 800;
-    private double _ratingValueBeforePointerPress = -1;
-    private int _ratingStarAtPointerPress;
+    private readonly ConditionalWeakTable<RatingControl, RatingPressState> _ratingPressStates = new();
+
+    private sealed class RatingPressState
+    {
+        public double ValueBeforePress { get; set; } = -1;
+        public int StarAtPress { get; set; }
+    }
 
     public MainWindow()
     {
@@ -45,41 +51,68 @@ public sealed partial class MainWindow : Window
         // interaction works without replacing its keyboard and accessibility behavior.
         InspectorRatingControl.AddHandler(
             UIElement.PointerPressedEvent,
-            new PointerEventHandler(InspectorRating_PointerPressed),
+            new PointerEventHandler(Rating_PointerPressed),
             handledEventsToo: true);
         InspectorRatingControl.AddHandler(
             UIElement.TappedEvent,
-            new TappedEventHandler(InspectorRating_Tapped),
+            new TappedEventHandler(Rating_Tapped),
             handledEventsToo: true);
 
         AppWindow.Changed += MainWindow_Changed;
         AppWindow.Closing += MainWindow_Closing;
     }
 
-    private void InspectorRating_PointerPressed(object sender, PointerRoutedEventArgs e)
+    private void EditableRating_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is not RatingControl rating)
             return;
 
-        _ratingValueBeforePointerPress = rating.Value;
-        _ratingStarAtPointerPress = RatingStarAtPosition(
+        rating.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(Rating_PointerPressed),
+            handledEventsToo: true);
+        rating.AddHandler(
+            UIElement.TappedEvent,
+            new TappedEventHandler(Rating_Tapped),
+            handledEventsToo: true);
+    }
+
+    private void EditableRating_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RatingControl rating)
+            return;
+
+        rating.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(Rating_PointerPressed));
+        rating.RemoveHandler(UIElement.TappedEvent, new TappedEventHandler(Rating_Tapped));
+        _ratingPressStates.Remove(rating);
+    }
+
+    private void Rating_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not RatingControl rating)
+            return;
+
+        var state = _ratingPressStates.GetOrCreateValue(rating);
+        state.ValueBeforePress = rating.Value;
+        state.StarAtPress = RatingStarAtPosition(
             e.GetCurrentPoint(rating).Position.X,
             rating.ActualWidth,
             rating.MaxRating);
     }
 
-    private void InspectorRating_Tapped(object sender, TappedRoutedEventArgs e)
+    private void Rating_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (sender is RatingControl rating
-            && _ratingValueBeforePointerPress > 0
-            && (int)Math.Round(_ratingValueBeforePointerPress) == _ratingStarAtPointerPress)
+            && _ratingPressStates.TryGetValue(rating, out var state)
+            && state.ValueBeforePress > 0
+            && (int)Math.Round(state.ValueBeforePress) == state.StarAtPress)
         {
             rating.Value = -1;
             e.Handled = true;
         }
 
-        _ratingValueBeforePointerPress = -1;
-        _ratingStarAtPointerPress = 0;
+        if (sender is RatingControl completedRating)
+            _ratingPressStates.Remove(completedRating);
     }
 
     private static int RatingStarAtPosition(double x, double width, int maxRating)

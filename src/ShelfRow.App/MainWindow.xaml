@@ -400,7 +400,7 @@
                                     <ColumnDefinition Width="24" />
                                     <ColumnDefinition Width="56" />
                                     <ColumnDefinition Width="*" MinWidth="180" />
-                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="120" />
                                     <ColumnDefinition Width="140" />
                                     <ColumnDefinition Width="100" />
                                     <ColumnDefinition Width="90" />
@@ -431,7 +431,7 @@
                                         <ColumnDefinition Width="24" />
                                         <ColumnDefinition Width="56" />
                                         <ColumnDefinition Width="*" MinWidth="180" />
-                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="120" />
                                         <ColumnDefinition Width="140" />
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="90" />
@@ -450,8 +450,17 @@
                                     <!-- Title -->
                                     <TextBlock Grid.Column="2" Text="{x:Bind Title, Mode=OneWay}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
-                                    <!-- Rating Stars -->
-                                    <TextBlock Grid.Column="3" Text="{x:Bind RatingStarsText, Mode=OneWay}" FontSize="11" Foreground="#EAB308" VerticalAlignment="Center" />
+                                    <!-- Rating Stars: directly editable, matching the inspector. -->
+                                    <RatingControl Grid.Column="3" Value="{x:Bind RatingValue, Mode=TwoWay}"
+                                                   MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left"
+                                                   Loaded="EditableRating_Loaded" Unloaded="EditableRating_Unloaded">
+                                        <RatingControl.Resources>
+                                            <SolidColorBrush x:Key="RatingControlSelectedForeground" Color="#EAB308" />
+                                            <SolidColorBrush x:Key="RatingControlPointerOverSelectedForeground" Color="#FACC15" />
+                                            <SolidColorBrush x:Key="RatingControlPlaceholderForeground" Color="#EAB308" />
+                                            <SolidColorBrush x:Key="RatingControlPointerOverPlaceholderForeground" Color="#FACC15" />
+                                        </RatingControl.Resources>
+                                    </RatingControl>
 
                                     <!-- Author -->
                                     <TextBlock Grid.Column="4" Text="{x:Bind Author, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
