@@ -508,9 +508,12 @@
 
                                     <!-- Rating Stars: directly editable, matching the inspector. -->
                                     <RatingControl Grid.Column="{x:Bind ListLayout.RatingColumn}" Visibility="{x:Bind ListLayout.RatingVisibility, Mode=OneWay}" Value="{x:Bind RatingValue, Mode=TwoWay}"
-                                                   MaxRating="5" IsClearEnabled="True" FontSize="14" HorizontalAlignment="Left"
+                                                   MaxRating="5" IsClearEnabled="True" HorizontalAlignment="Left"
                                                    Loaded="EditableRating_Loaded" Unloaded="EditableRating_Unloaded">
                                         <RatingControl.Resources>
+                                            <!-- RatingControl ignores Control.FontSize for its stars. It renders
+                                                 this resource at half scale, so 28 produces 14 px stars. -->
+                                            <x:Double x:Key="RatingControlFontSizeForRendering">28</x:Double>
                                             <SolidColorBrush x:Key="RatingControlSelectedForeground" Color="#EAB308" />
                                             <SolidColorBrush x:Key="RatingControlPointerOverSelectedForeground" Color="#FACC15" />
                                             <SolidColorBrush x:Key="RatingControlPlaceholderForeground" Color="#EAB308" />
